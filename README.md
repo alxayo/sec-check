@@ -10,6 +10,12 @@ Sechek provides a custom Copilot agent and security scanning skills to detect da
 
 ---
 
+![sec-check](media/sec-check.jpeg)
+
+[View results of a full scan here](audit-results/scan-results.md)
+
+---
+
 ## Components
 
 ### 🤖 Custom Agent
