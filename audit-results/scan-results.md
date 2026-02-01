@@ -259,7 +259,7 @@ Hardcoded Azure DevOps Personal Access Token in configuration file within traini
 ################################################################################
 
 # ADO Credential, already invalidated
-AZURE_DEVOPS_KEY=yylxibmlziutjpgip57zmbgjxdym6dxevwtt2ucsgovistwncr6q
+AZURE_DEVOPS_KEY=xxxxxxxxxxxxxxx
 
 ENVIRONMENT=integration
 
