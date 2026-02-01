@@ -1,7 +1,7 @@
 ---
-name: sechek.python-security-scan
+name: sck.python-security-scan
 description: Python-focused security scan using bandit and guarddog
-agent: sechek.security-scanner
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 ---
 

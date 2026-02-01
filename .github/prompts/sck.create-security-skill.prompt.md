@@ -1,5 +1,5 @@
 ---
-name: sechek.skill-create-security
+name: sck.skill-create-security
 description: Create a VS Code Agent Skill for a security scanning tool
 argument-hint: "Provide tool name and documentation URL (e.g., 'bandit https://github.com/PyCQA/bandit')"
 agent: agent

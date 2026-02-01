@@ -1,7 +1,7 @@
 ---
-name: sechek.precommit-security-scan
+name: sck.precommit-security-scan
 description: Pre-commit security check for secrets, malicious patterns, and vulnerabilities
-agent: sechek.security-scanner
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 ---
 

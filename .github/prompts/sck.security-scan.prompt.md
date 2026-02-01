@@ -1,7 +1,7 @@
 ---
-name: sechek.scan-security
-description: Run a comprehensive malicious code scan on the workspace using the sechek security scanner agent
-agent: sechek.security-scanner
+name: sck.scan-security
+description: Run a comprehensive malicious code scan on the workspace using the sec-check security scanner agent
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 argument-hint: "[path] or leave empty for full workspace scan"
 tools: ['read/problems', 'read/readFile', 'search/codebase', 'search/fileSearch', 'search/textSearch', 'search/usages', 'search/listDirectory', 'todo', 'agent', 'execute', 'edit', 'search']

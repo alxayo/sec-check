@@ -1,7 +1,7 @@
 ---
-name: sechek.quick-security-scan
+name: sck.quick-security-scan
 description: Quick security scan for malicious patterns, exfiltration, and reverse shells
-agent: sechek.security-scanner
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 ---
 

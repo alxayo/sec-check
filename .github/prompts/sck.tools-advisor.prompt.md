@@ -1,5 +1,5 @@
 ---
-name: sechek.tools-advisor
+name: sck.tools-advisor
 description: Analyze code structure and recommend the best security scanning skill(s) to detect malicious or harmful patterns
 argument-hint: '[path to analyze]'
 agent: agent

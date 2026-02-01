@@ -1,7 +1,7 @@
 ---
-name: sechek.shell-security-scan
+name: sck.shell-security-scan
 description: Shell script security scan using shellcheck and graudit
-agent: sechek.security-scanner
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 ---
 

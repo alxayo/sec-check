@@ -1,7 +1,7 @@
 ---
-name: sechek.supply-chain-security-scan
+name: sck.supply-chain-security-scan
 description: Scan dependencies for supply chain attacks, typosquatting, and malicious packages
-agent: sechek.security-scanner
+agent: sck.security-scanner
 model: Claude Sonnet 4.5
 ---
 

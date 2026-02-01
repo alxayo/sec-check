@@ -1,4 +1,4 @@
-# Sechek
+# Sec-Check
 
 A VS Code Copilot toolkit for scanning code for malicious patterns before running it locally.
 

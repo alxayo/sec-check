@@ -1,6 +1,6 @@
 ---
 description: Analyze code for malicious patterns, security vulnerabilities, and suspicious behaviors that could indicate threats like data exfiltration, reverse shells, or backdoors.
-name: sechek.security-scanner
+name: sck.security-scanner
 tools: ['read/problems', 'read/readFile', 'search/codebase', 'search/fileSearch', 'search/textSearch', 'search/usages', 'search/listDirectory', 'todo', 'agent', 'execute', 'edit', 'search']
 model: Claude Sonnet 4.5
 ---

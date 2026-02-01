@@ -1,6 +1,6 @@
 ---
 description: Execute security scanning tools against source code to detect malicious or harmful patterns. Runs Bandit, GuardDog, ShellCheck, and Graudit based on recommendations.
-name: sechek.scan-tools
+name: sck.scan-tools
 argument-hint: "[target-path] [--tools=tool1,tool2]"
 agent: agent
 model: Claude Sonnet 4.5
