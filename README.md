@@ -58,7 +58,25 @@ Skills teach Copilot how to use specific security tools:
 | **`/sechek.security-scan-shell`** | Shell script scan using ShellCheck and Graudit |
 | **`/sechek.security-scan-supply-chain`** | Scan dependencies for supply chain attacks |
 | **`/sechek.security-scan-precommit`** | Pre-commit check for secrets and vulnerabilities |
+| **`/sechek.plan-fix`** | Generate a prioritized remediation plan from scan results |
 | **`/create-security-skill`** | Create a new security scanning skill from tool documentation |
+
+---
+
+## Security Remediation Planning
+
+After running security scans, use `/sechek.plan-fix` to generate a detailed remediation plan with prioritized tasks, timelines, and fix patterns.
+
+![Security Remediation Planning](media/sec-plan.png)
+
+[View a sample remediation plan here](audit-results/remediation-tasks.md)
+
+The plan includes:
+- **Prioritized tasks** grouped by severity (Critical → High → Medium → Low)
+- **SLA timelines** (24 hours for Critical, 1 week for High, etc.)
+- **Fix patterns** with vulnerable vs. secure code examples
+- **Parallel execution opportunities** to speed up remediation
+- **Verification commands** to confirm fixes
 
 ---
 
