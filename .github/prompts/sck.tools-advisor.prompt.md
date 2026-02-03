@@ -114,6 +114,30 @@ Review these skills from the `.github/skills/` folder:
 - **Best for**: Quick multi-language audits, broad vulnerability sweeps, unknown/mixed codebases, rapid triage
 - **NOT for**: Sole scanner when Bandit (Python .py) or ShellCheck (shell .sh) are applicable—use alongside them
 
+### 5. Dependency-Check Security Scan
+- **Skill**: `dependency-check-security-scan`
+- **Skill file**: [.github/skills/dependency-check-security-scan/SKILL.md](.github/skills/dependency-check-security-scan/SKILL.md)
+- **Purpose**: Software Composition Analysis (SCA) for known CVEs in dependencies
+- **Supported ecosystems**:
+  - **Production**: Java (.jar, .war, .ear, pom.xml, Gradle), .NET (.dll, .exe, .nupkg, packages.config, *.csproj), JavaScript (package.json, package-lock.json), Ruby (Gemfile.lock)
+  - **Experimental** (enable with `--enableExperimental`): Python (requirements.txt, setup.py), Go (go.mod), PHP (composer.lock), Swift (Package.swift), Dart (pubspec.yaml)
+- **Vulnerability sources**:
+  - NVD (NIST) - primary CVE source with CVSS scores
+  - CISA KEV - Known Exploited Vulnerabilities catalog
+  - Sonatype OSS Index - supplemental vulnerability database
+  - RetireJS - JavaScript-specific vulnerabilities
+  - NPM Audit - GitHub Advisory Database
+- **Output formats**: HTML, JSON, SARIF (for CI/CD), XML, CSV, JUNIT, GITLAB
+- **Key features**:
+  - CI/CD gates with `--failOnCVSS <score>` (fail on severity threshold)
+  - Suppression files for false positive management
+  - Docker scanning support
+  - SBOM (Software Bill of Materials) generation
+- **MITRE ATT&CK mapped**: Yes (T1195.001, T1195.002, T1190, T1203, T1059)
+- **Best for**: Compliance scanning (SOC2, PCI-DSS, HIPAA), pre-deployment CVE audits, CI/CD security gates, supply chain risk assessment
+- **NOT for**: Malicious package detection (use GuardDog), source code vulnerabilities (use Bandit/Graudit)
+- **Key distinction from GuardDog**: Dependency-Check detects **known CVEs** in dependencies; GuardDog detects **malicious packages/malware**
+
 ---
 
 ## Quick Decision Flowchart
@@ -127,14 +151,22 @@ START: What's the primary concern?
 │   └─► YES → Graudit (exec+secrets) FIRST, then others
 │
 ├─► "Are there DEPENDENCY FILES?" (requirements.txt, package.json, etc.)
-│   └─► YES → GuardDog verify FIRST
+│   ├─► Need MALWARE/supply chain attack detection?
+│   │   └─► YES → GuardDog verify FIRST
+│   └─► Need KNOWN CVE/vulnerability detection?
+│       └─► YES → Dependency-Check FIRST
+│   (For comprehensive audit: run BOTH GuardDog + Dependency-Check)
+│
+├─► "Is COMPLIANCE required?" (SOC2, PCI-DSS, HIPAA)
+│   └─► YES → Dependency-Check with --failOnCVSS threshold
 │
 ├─► "What LANGUAGE is the code?"
 │   ├─► Python (.py) → Bandit (primary) + Graudit (secrets)
 │   ├─► JavaScript/TypeScript → GuardDog + Graudit (js/typescript)
 │   ├─► Shell (.sh, .bash) → ShellCheck (primary) + Graudit (exec)
+│   ├─► Java/.NET/Go/Ruby → Dependency-Check + Graudit (language-specific)
 │   ├─► Mixed/Unknown → Graudit (default) first, then language-specific
-│   └─► Other (PHP, Java, Go, etc.) → Graudit (language-specific db)
+│   └─► Other (PHP, etc.) → Graudit (language-specific db)
 │
 └─► "Are there CI/CD or INFRASTRUCTURE files?"
     └─► YES → ShellCheck for shell in workflows/Dockerfiles
@@ -149,16 +181,21 @@ Use this matrix to determine optimal skill selection:
 | Code Type | Primary Skill | Secondary Skill(s) | Rationale |
 |-----------|---------------|-------------------|-----------|
 | **Python** | Bandit | Graudit (secrets) | AST-based deep analysis |
-| **Python + deps** | GuardDog (verify) → Bandit | Graudit (secrets) | Supply chain first |
+| **Python + deps** | GuardDog (verify) → Bandit | Dependency-Check, Graudit (secrets) | Malware + CVEs + source |
 | **JavaScript/TypeScript** | GuardDog | Graudit (js/typescript) | Malware + pattern matching |
-| **Node.js + deps** | GuardDog (verify) → GuardDog (scan) | Graudit (js) | Verify deps, then source |
+| **Node.js + deps** | GuardDog (verify) + Dependency-Check | Graudit (js) | Malware + CVEs + source |
+| **Java + deps** | Dependency-Check | Graudit (java, secrets) | Strong Java CVE detection |
+| **.NET + deps** | Dependency-Check | Graudit (dotnet, secrets) | Strong .NET CVE detection |
+| **Go + deps** | Dependency-Check (experimental) | Graudit (go, secrets) | CVE detection for go.mod |
+| **Ruby + deps** | Dependency-Check | Graudit (ruby, secrets) | CVE detection for Gemfile |
 | **Shell scripts** | ShellCheck | Graudit (exec) | AST + obfuscation patterns |
 | **CI/CD / Dockerfiles** | ShellCheck | Graudit (exec, secrets) | Embedded shell commands |
 | **Django/Flask** | Bandit (framework flags) | Graudit (xss, sql) | Framework-specific tests |
 | **Mixed languages** | Graudit (default) | Language-specific tools | Broad sweep first |
 | **Unknown/untrusted** | Graudit (exec, secrets) | All applicable tools | Quick triage |
 | **Mobile (Android/iOS)** | Graudit (android/ios) | Graudit (secrets) | Platform-specific |
-| **PHP/Java/Go/Ruby/.NET** | Graudit (language db) | Graudit (secrets, sql) | No specialized tool |
+| **PHP** | Graudit (php) | Dependency-Check (experimental), Graudit (secrets, sql) | CVE + pattern matching |
+| **Compliance required** | Dependency-Check (--failOnCVSS) | All applicable source scanners | CVE gates + code review |
 
 ---
 
@@ -167,10 +204,13 @@ Use this matrix to determine optimal skill selection:
 When multiple tools could apply, use these priority rules:
 
 1. **Untrusted code always wins**: If origin is unknown/suspicious → Start with Graudit (exec+secrets)
-2. **Dependencies before source**: If dependency files exist → GuardDog verify before scanning source
-3. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit
-4. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
-5. **Specificity over generality**: Language-specific database > `default` database
+2. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check (CVEs) before scanning source
+3. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check (CVEs) for comprehensive supply chain security
+4. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit
+5. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
+6. **Specificity over generality**: Language-specific database > `default` database
+7. **Compliance requirements**: If SOC2/PCI-DSS/HIPAA required → Dependency-Check with `--failOnCVSS` is mandatory
+8. **Java/.NET projects**: Dependency-Check is primary for dependencies (strongest support for these ecosystems)
 
 ---
 
@@ -184,7 +224,10 @@ When time is limited, prioritize scans based on risk profile:
 | **Pre-Installation** (new dependency) | 1. GuardDog scan \<pkg\> → 2. Graudit (exec) | < 1 min |
 | **Routine Audit** (own code) | 1. Language-specific → 2. Graudit (secrets) | 5-10 min |
 | **Deep Analysis** (security review) | All tools, all databases | 15-30 min |
-| **Supply Chain Focus** | 1. GuardDog verify → 2. Graudit (secrets) → 3. Bandit | 5-10 min |
+| **Supply Chain Focus** | 1. GuardDog verify → 2. Dependency-Check → 3. Graudit (secrets) | 5-15 min |
+| **Compliance Audit** (SOC2/PCI-DSS) | 1. Dependency-Check (--failOnCVSS 7) → 2. All source scanners | 10-20 min |
+| **Java/.NET Enterprise** | 1. Dependency-Check → 2. Graudit (language+secrets) | 5-15 min |
+| **Pre-Deployment Gate** | 1. Dependency-Check (--failOnCVSS 7) → 2. GuardDog verify → 3. Source scan | 10-20 min |
 
 ---
 
@@ -323,6 +366,17 @@ When recommending skills, include these optimized commands:
 - Deep scan (use helper): `./graudit-deep-scan.sh /path/to/code ./report`
 - Exclude tests: `graudit -x "test/*,tests/*" -d secrets .`
 
+### Dependency-Check
+- Basic scan: `dependency-check.sh --scan ./ --out ./reports --project "MyProject"`
+- With NVD API key (recommended): `dependency-check.sh --scan ./ --nvdApiKey $NVD_API_KEY --out ./reports`
+- CI/CD gate (fail on HIGH): `dependency-check.sh --scan ./ --failOnCVSS 7 --format SARIF --out ./reports`
+- CI/CD gate (fail on CRITICAL): `dependency-check.sh --scan ./ --failOnCVSS 9 --format JSON --out ./reports`
+- Multiple formats: `dependency-check.sh --scan ./ --format HTML --format JSON --format SARIF --out ./reports`
+- With suppression file: `dependency-check.sh --scan ./ --suppression ./suppression.xml --failOnCVSS 7`
+- Enable experimental analyzers: `dependency-check.sh --scan ./ --enableExperimental --out ./reports`
+- Docker scan: `docker run -v $(pwd):/src owasp/dependency-check --scan /src --out /src/reports`
+- Quick scan (cached DB): `dependency-check.sh --scan ./ --noupdate --format HTML --out ./reports`
+
 ---
 
 ## Next Steps
@@ -355,6 +409,10 @@ To execute these recommended scans:
 | Use ShellCheck alone for obfuscated scripts | Add Graudit (exec) for base64/hex patterns |
 | Recommend `graudit -d default` when language is known | Use language-specific database |
 | Skip secrets scan | Always include Graudit (secrets) as secondary |
+| Use GuardDog alone for CVE detection | GuardDog detects malware, not CVEs—add Dependency-Check |
+| Use Dependency-Check for malware detection | Dependency-Check detects CVEs, not malware—add GuardDog |
+| Skip Dependency-Check for Java/.NET projects | These ecosystems have strongest Dependency-Check support |
+| Ignore compliance requirements | Use Dependency-Check with --failOnCVSS for SOC2/PCI-DSS/HIPAA |
 
 ---
 
@@ -364,10 +422,11 @@ When making recommendations, account for these limitations:
 
 | Tool | Cannot Detect | Mitigation |
 |------|---------------|------------|
-| **Bandit** | Non-Python code, runtime vulnerabilities, obfuscated string code, vulnerable dependencies | Add Graudit for embedded code, GuardDog for deps |
-| **GuardDog** | Logic vulnerabilities, runtime-only behavior, sophisticated obfuscation, your own code vulns | Use Bandit/Graudit for source code |
+| **Bandit** | Non-Python code, runtime vulnerabilities, obfuscated string code, vulnerable dependencies | Add Graudit for embedded code, GuardDog/Dependency-Check for deps |
+| **GuardDog** | Logic vulnerabilities, runtime-only behavior, sophisticated obfuscation, your own code vulns, known CVEs | Use Bandit/Graudit for source code, Dependency-Check for CVEs |
 | **ShellCheck** | Base64/hex obfuscated payloads, dynamic payload generation, embedded Python/Perl/Ruby | Add `graudit -d exec`, run in sandbox |
 | **Graudit** | Logic flaws, obfuscated/encrypted code beyond patterns, context-dependent vulns | Manual review, combine with AST tools |
+| **Dependency-Check** | Malicious packages (malware), source code vulnerabilities, false positives from CPE matching, zero-day vulnerabilities not yet in NVD | Use GuardDog for malware, Bandit/Graudit for source code, suppression.xml for false positives |
 
 ### Combined Blind Spots
 All tools are static analysis only - they cannot detect:
