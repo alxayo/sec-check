@@ -1,4 +1,7 @@
 # Sec-Check
+![sec-check agent](media/sec-check.png)
+
+Scan untrusted code for red flags before you run it—exfiltration, reverse shells, backdoors, and supply‑chain traps.
 
 A VS Code Copilot toolkit for scanning code for malicious patterns before running it locally.
 
