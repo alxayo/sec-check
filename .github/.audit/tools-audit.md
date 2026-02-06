@@ -169,12 +169,12 @@ OUTPUT_FORMAT="color"  # Currently unused
 
 **graudit-deep-scan.sh** - Fix variable masking:
 ```bash
-# Line 87: Change from:
+# Line 87: Current (problematic):
+local findings=$(graudit -z -c 2 -d "$db" "$TARGET" 2>/dev/null || true)
+
+# Recommended fix (declare and assign separately):
 local findings
 findings=$(graudit -z -c 2 -d "$db" "$TARGET" 2>/dev/null || true)
-
-# Instead of:
-local findings=$(graudit -z -c 2 -d "$db" "$TARGET" 2>/dev/null || true)
 ```
 
 ---
