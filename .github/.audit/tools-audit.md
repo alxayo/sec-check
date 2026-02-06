@@ -1,6 +1,6 @@
 # Security Tools Audit Report
 
-**Generated**: 2026-02-06T18:41:56Z  
+**Generated**: 2026-02-06T18:59:29Z  
 **Target**: /home/runner/work/sec-check/sec-check (full workspace)  
 **Operating Mode**: Partial (Limited tools available)
 
