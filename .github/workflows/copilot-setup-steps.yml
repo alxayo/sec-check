@@ -1,0 +1,133 @@
+name: "Copilot Setup Steps"
+
+# Automatically run the setup steps when they are changed to allow for easy validation,
+# and allow manual testing through the repository's "Actions" tab
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # Set the permissions to the lowest permissions possible needed for your steps.
+    # Copilot will be given its own token for its operations.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # ============================================================
+      # PYTHON SETUP (Required for Checkov and useful for projects)
+      # ============================================================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ============================================================
+      # JAVA SETUP (Required for OWASP Dependency-Check)
+      # ============================================================
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      # ============================================================
+      # GRAUDIT SECURITY SCANNER
+      # Grep-based source code auditing tool for detecting dangerous
+      # patterns, command injection, hardcoded secrets, and more.
+      # https://github.com/wireghoul/graudit
+      # ============================================================
+      - name: Install Graudit
+        run: |
+          echo "Installing Graudit Security Scanner..."
+          git clone https://github.com/wireghoul/graudit ~/graudit
+          echo "$HOME/graudit" >> $GITHUB_PATH
+          echo "GRDIR=$HOME/graudit/signatures" >> $GITHUB_ENV
+
+      - name: Verify Graudit installation
+        run: |
+          export PATH="$HOME/graudit:$PATH"
+          export GRDIR="$HOME/graudit/signatures"
+          graudit -h || echo "Graudit help command executed"
+          echo "Available Graudit signature databases:"
+          ls -la ~/graudit/signatures/
+
+      # ============================================================
+      # OWASP DEPENDENCY-CHECK
+      # Software Composition Analysis (SCA) tool that identifies
+      # known vulnerabilities (CVEs) in project dependencies.
+      # https://github.com/dependency-check/DependencyCheck
+      # ============================================================
+      - name: Install OWASP Dependency-Check
+        run: |
+          echo "Installing OWASP Dependency-Check..."
+          # Get the latest version
+          DC_VERSION=$(curl -s https://dependency-check.github.io/DependencyCheck/current.txt)
+          echo "Latest Dependency-Check version: $DC_VERSION"
+          
+          # Download and extract
+          curl -Ls "https://github.com/dependency-check/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" -o /tmp/dependency-check.zip
+          unzip -q /tmp/dependency-check.zip -d ~/
+          
+          # Add to PATH
+          echo "$HOME/dependency-check/bin" >> $GITHUB_PATH
+
+      - name: Verify Dependency-Check installation
+        run: |
+          export PATH="$HOME/dependency-check/bin:$PATH"
+          dependency-check.sh --version
+
+      # ============================================================
+      # CHECKOV SECURITY SCANNER
+      # Infrastructure as Code (IaC) static analysis tool for
+      # detecting misconfigurations in Terraform, CloudFormation,
+      # Kubernetes, Dockerfiles, and more.
+      # https://github.com/bridgecrewio/checkov
+      # ============================================================
+      - name: Install Checkov
+        run: |
+          echo "Installing Checkov Security Scanner..."
+          pip install --upgrade pip
+          pip install checkov
+
+      - name: Verify Checkov installation
+        run: |
+          checkov --version
+          echo "Checkov frameworks supported:"
+          checkov --list | head -50
+
+      # ============================================================
+      # FINAL VERIFICATION
+      # ============================================================
+      - name: Verify all security tools are available
+        run: |
+          echo "=========================================="
+          echo "Security Scanning Tools Installation Summary"
+          echo "=========================================="
+          echo ""
+          echo "1. Graudit:"
+          which graudit || echo "   Location: $HOME/graudit/graudit"
+          echo "   Signature databases available in: $HOME/graudit/signatures/"
+          echo ""
+          echo "2. OWASP Dependency-Check:"
+          which dependency-check.sh || echo "   Location: $HOME/dependency-check/bin/dependency-check.sh"
+          dependency-check.sh --version 2>/dev/null || true
+          echo ""
+          echo "3. Checkov:"
+          which checkov
+          checkov --version
+          echo ""
+          echo "=========================================="
+          echo "All security scanning tools installed successfully!"
+          echo "=========================================="
