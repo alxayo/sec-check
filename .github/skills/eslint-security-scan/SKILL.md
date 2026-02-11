@@ -1,4 +1,3 @@
-````skill
 ---
 name: eslint-security-scan
 description: Security analysis of JavaScript/TypeScript code (.js, .jsx, .ts, .tsx) for vulnerabilities using ESLint with security plugins. (1) Detects code injection (eval, Function), XSS (innerHTML, dangerouslySetInnerHTML), command injection (child_process), ReDoS, path traversal, insecure crypto, prototype pollution. Use for web apps, Node.js services, React/Vue/Angular projects, npm packages, malicious code triage. NOT use for dependency CVEs (use npm audit), non-JavaScript code (use language-specific tools), minified code. For full coverage combine with npm audit or OWASP Dependency-Check for supply chain security.
