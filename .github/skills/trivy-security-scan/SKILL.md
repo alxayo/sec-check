@@ -1,4 +1,3 @@
-```skill
 ---
 name: trivy-security-scan
 description: Comprehensive security scanner for container images, filesystems, Git repositories, Kubernetes, and IaC. (1) Detects known vulnerabilities (CVEs) in OS packages and dependencies. (2) Scans for IaC misconfigurations (Terraform, CloudFormation, Helm, Kubernetes YAML). (3) Detects hardcoded secrets (API keys, passwords, tokens). (4) Identifies license compliance issues. Use for container security, cloud-native security, DevSecOps pipelines, pre-deployment scans. Targets: Docker images, filesystem directories, remote Git repos, Kubernetes clusters, SBOM files. Do NOT use for Python source code vulnerabilities (use bandit), shell script issues (use shellcheck), or malicious package detection (use guarddog).
