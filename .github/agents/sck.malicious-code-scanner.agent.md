@@ -41,8 +41,7 @@ The `runTerminal` tool may ONLY be used for:
 - ✅ `bandit` - Python security scanner
 - ✅ `guarddog` - Supply chain security scanner
 - ✅ `shellcheck` - Shell script analyzer
-- ✅ `graudit` - Pattern-based scanner
-- ✅ `mkdir -p .github/.audit` - Creating output directories
+- ✅ `graudit` - Pattern-based scanner- ✅ `checkov` - Infrastructure as Code security scanner- ✅ `mkdir -p .github/.audit` - Creating output directories
 - ✅ `which`/`--version` commands - Checking tool availability
 - ✅ `grep`, `find`, `cat`, `head`, `tail` - Reading/searching files (NOT executing them)
 
@@ -82,6 +81,7 @@ When security skills are available in `.github/skills/`, leverage them for compr
 | **GuardDog** | `.github/skills/guarddog-security-scan/SKILL.md` | Supply chain & malware detection (Python/Node.js) |
 | **ShellCheck** | `.github/skills/shellcheck-security-scan/SKILL.md` | Shell script security analysis |
 | **Graudit** | `.github/skills/graudit-security-scan/SKILL.md` | Multi-language pattern matching |
+| **Checkov** | `.github/skills/checkov-security-scan/SKILL.md` | Infrastructure as Code (IaC) security & compliance |
 
 **Workflow with skills:**
 1. Check if `.github/skills/` directory exists
@@ -123,6 +123,7 @@ bandit --version 2>/dev/null && echo "✅ Bandit available" || echo "⚠️ Band
 guarddog --version 2>/dev/null && echo "✅ GuardDog available" || echo "⚠️ GuardDog not installed"
 shellcheck --version 2>/dev/null && echo "✅ ShellCheck available" || echo "⚠️ ShellCheck not installed"
 which graudit 2>/dev/null && echo "✅ Graudit available" || echo "⚠️ Graudit not installed"
+checkov --version 2>/dev/null && echo "✅ Checkov available" || echo "⚠️ Checkov not installed"
 ```
 
 ### Step 3: Select Operating Mode
@@ -156,6 +157,11 @@ Based on the skills' decision matrices, execute in this order:
 | Python + deps | `guarddog pypi verify` | `bandit -r .` | guarddog-security-scan |
 | Node.js | `guarddog npm scan` | `graudit -d js` | guarddog-security-scan |
 | Shell (.sh) | `shellcheck` | `graudit -d exec` | shellcheck-security-scan |
+| Terraform (.tf) | `checkov -d . --framework terraform` | `graudit -d secrets` | checkov-security-scan |
+| Kubernetes (manifests) | `checkov -d . --framework kubernetes` | `graudit -d secrets` | checkov-security-scan |
+| Dockerfile | `checkov -f Dockerfile --framework dockerfile` | `shellcheck` (RUN commands) | checkov-security-scan |
+| GitHub Actions (.yml) | `checkov -d .github/workflows --framework github_actions` | `shellcheck` (run steps) | checkov-security-scan |
+| CloudFormation | `checkov -d . --framework cloudformation` | `graudit -d secrets` | checkov-security-scan |
 | Unknown/Untrusted | `graudit -d exec,secrets` | All others | graudit-security-scan |
 
 ### Cross-Reference with tools-audit.md
@@ -412,8 +418,11 @@ For each suspicious pattern found, evaluate:
 | Node.js | **ESLint** + `eslint-plugin-security` | `child_process.exec()`, unsafe patterns |
 | PowerShell | **PSScriptAnalyzer** | `Invoke-Expression`, `Set-ExecutionPolicy` |
 | Bash | **ShellCheck** | Unquoted variables, command injection risks |
-| Bash | **Graudit** | High-risk signatures like `/dev/tcp/` |
-
+| Bash | **Graudit** | High-risk signatures like `/dev/tcp/` || Terraform | **Checkov** | Exposed secrets in IaC, insecure resource configs, public access |
+| Kubernetes | **Checkov** | Privileged containers, secrets in manifests, security policies |
+| Dockerfile | **Checkov** | Hardcoded secrets, insecure base images, exposed ports |
+| GitHub Actions | **Checkov** | Secrets in workflows, unpinned actions, shell injection risks |
+| CloudFormation | **Checkov** | AWS misconfigurations, hardcoded credentials, public resources |
 ---
 
 ## Analysis Framework
@@ -553,6 +562,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | guarddog-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | shellcheck-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | graudit-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
+| checkov-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 
 ### Limitations (if Standalone Mode)
 [List any detection limitations due to missing tools]
@@ -612,6 +622,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | GuardDog | `.github/skills/guarddog-security-scan/SKILL.md` |
 | ShellCheck | `.github/skills/shellcheck-security-scan/SKILL.md` |
 | Graudit | `.github/skills/graudit-security-scan/SKILL.md` |
+| Checkov | `.github/skills/checkov-security-scan/SKILL.md` |
 
 ### If Skills Are Missing:
 
