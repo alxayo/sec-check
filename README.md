@@ -43,6 +43,7 @@ Skills teach Copilot how to use specific security tools:
 | Skill | Purpose | Use For |
 |-------|---------|---------|
 | **bandit-security-scan** | Python AST-based security analysis | Python code vulnerabilities, dangerous functions (eval, exec, pickle), SQL injection |
+| **checkov-security-scan** | Infrastructure as Code security analysis | Terraform, CloudFormation, Kubernetes manifests, Dockerfiles, cloud misconfigurations, IAM policies |
 | **guarddog-security-scan** | Supply chain & malware detection | Dependencies (`requirements.txt`, `package.json`), typosquatting, malicious packages |
 | **shellcheck-security-scan** | Shell script static analysis | Bash/sh scripts, command injection, unquoted variables |
 | **graudit-security-scan** | Multi-language pattern matching | Quick scans on unknown codebases, secrets detection, 15+ languages |
@@ -58,6 +59,7 @@ Skills teach Copilot how to use specific security tools:
 | **`/sechek.security-scan`** | Full workspace scan with the security scanner agent |
 | **`/sechek.security-scan-quick`** | Fast scan for malicious patterns, exfiltration, reverse shells |
 | **`/sechek.security-scan-python`** | Python-focused scan using Bandit and GuardDog |
+| **`/sechek.security-scan-iac`** | Infrastructure as Code scan using Checkov for cloud misconfigurations |
 | **`/sechek.security-scan-shell`** | Shell script scan using ShellCheck and Graudit |
 | **`/sechek.security-scan-supply-chain`** | Scan dependencies for supply chain attacks |
 | **`/sechek.security-scan-precommit`** | Pre-commit check for secrets and vulnerabilities |
