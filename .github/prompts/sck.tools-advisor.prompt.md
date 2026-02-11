@@ -167,6 +167,31 @@ Review these skills from the `.github/skills/` folder:
 - **NOT for**: Application source code vulnerabilities (use Bandit/Graudit), dependency/package audits (use GuardDog/Dependency-Check)
 - **Key distinction**: Checkov scans **infrastructure configuration** for misconfigurations; other tools scan **application code** for vulnerabilities
 
+### 7. ESLint Security Scan
+- **Skill**: `eslint-security-scan`
+- **Skill file**: [.github/skills/eslint-security-scan/SKILL.md](.github/skills/eslint-security-scan/SKILL.md)
+- **Purpose**: Security analysis of JavaScript/TypeScript code for vulnerabilities using ESLint with security plugins
+- **Languages**: JavaScript, TypeScript
+- **File types**: `.js`, `.jsx`, `.ts`, `.tsx`
+- **Frameworks supported**: React, Vue, Angular, Node.js, Express, Next.js
+- **Detection capabilities**:
+  - Code injection (`eval()`, `Function()`, `new Function()`)
+  - XSS vulnerabilities (`innerHTML`, `dangerouslySetInnerHTML`, `insertAdjacentHTML`)
+  - Command injection (`child_process.exec()`, `child_process.spawn()`)
+  - ReDoS (Regular Expression Denial of Service)
+  - Path traversal and unsafe file operations
+  - Insecure cryptography and weak PRNG
+  - Prototype pollution risks
+  - Dynamic require/import statements
+  - Unsafe regex patterns
+  - Timing attack vulnerabilities
+- **Security plugins**: eslint-plugin-security, eslint-plugin-no-unsanitized, @typescript-eslint/eslint-plugin
+- **Output formats**: JSON, SARIF, HTML, compact, Unix-style
+- **MITRE ATT&CK mapped**: Yes (T1059.007, T1059.004, T1083, T1499, T1552, T1129)
+- **Best for**: Web apps (React/Vue/Angular), Node.js services, npm package triage, malicious code detection, OWASP Top 10 JavaScript issues
+- **NOT for**: Dependency CVEs (use npm audit/Dependency-Check), non-JavaScript code, minified/heavily obfuscated code, malicious npm packages (use GuardDog)
+- **Key distinction**: ESLint scans **JavaScript/TypeScript source code** for vulnerabilities; GuardDog detects **malicious npm packages**; Dependency-Check finds **known CVEs**
+
 ---
 
 ## Quick Decision Flowchart
@@ -201,7 +226,7 @@ START: What's the primary concern?
 │
 ├─► "What LANGUAGE is the code?"
 │   ├─► Python (.py) → Bandit (primary) + Graudit (secrets)
-│   ├─► JavaScript/TypeScript → GuardDog + Graudit (js/typescript)
+│   ├─► JavaScript/TypeScript (.js, .jsx, .ts, .tsx) → ESLint (primary) + GuardDog (packages) + Graudit (secrets)
 │   ├─► Shell (.sh, .bash) → ShellCheck (primary) + Graudit (exec)
 │   ├─► Java/.NET/Go/Ruby → Dependency-Check + Graudit (language-specific)
 │   ├─► Mixed/Unknown → Graudit (default) first, then language-specific
@@ -224,8 +249,10 @@ Use this matrix to determine optimal skill selection:
 |-----------|---------------|-------------------|-----------|
 | **Python** | Bandit | Graudit (secrets) | AST-based deep analysis |
 | **Python + deps** | GuardDog (verify) → Bandit | Dependency-Check, Graudit (secrets) | Malware + CVEs + source |
-| **JavaScript/TypeScript** | GuardDog | Graudit (js/typescript) | Malware + pattern matching |
-| **Node.js + deps** | GuardDog (verify) + Dependency-Check | Graudit (js) | Malware + CVEs + source |
+| **JavaScript/TypeScript** | ESLint | Graudit (js/typescript), GuardDog (packages) | AST-based vulnerability detection |
+| **Node.js + deps** | GuardDog (verify) + Dependency-Check → ESLint | Graudit (js, secrets) | Malware + CVEs + source |
+| **React/Vue/Angular** | ESLint | Graudit (xss, secrets) | Framework-specific security |
+| **npm packages** | GuardDog (scan) → ESLint | Graudit (js, exec) | Malware detection + source |
 | **Java + deps** | Dependency-Check | Graudit (java, secrets) | Strong Java CVE detection |
 | **.NET + deps** | Dependency-Check | Graudit (dotnet, secrets) | Strong .NET CVE detection |
 | **Go + deps** | Dependency-Check (experimental) | Graudit (go, secrets) | CVE detection for go.mod |
@@ -294,16 +321,16 @@ Follow these steps:
 Search the target path for:
 
 **Programming Languages** (by file extension):
-- `.py` → Python
-- `.js`, `.mjs`, `.cjs`, `.jsx` → JavaScript
-- `.ts`, `.tsx` → TypeScript
-- `.sh`, `.bash` → Shell/Bash
-- `.php` → PHP
-- `.java` → Java
-- `.go` → Go
-- `.rb` → Ruby
-- `.c`, `.h`, `.cpp`, `.hpp` → C/C++
-- `.cs` → C#/.NET
+- `.py` → Python (use Bandit)
+- `.js`, `.mjs`, `.cjs`, `.jsx` → JavaScript (use ESLint)
+- `.ts`, `.tsx` → TypeScript (use ESLint)
+- `.sh`, `.bash` → Shell/Bash (use ShellCheck)
+- `.php` → PHP (use Graudit)
+- `.java` → Java (use Dependency-Check + Graudit)
+- `.go` → Go (use Dependency-Check + Graudit)
+- `.rb` → Ruby (use Dependency-Check + Graudit)
+- `.c`, `.h`, `.cpp`, `.hpp` → C/C++ (use Graudit)
+- `.cs` → C#/.NET (use Dependency-Check + Graudit)
 
 **Dependency Files**:
 - `requirements.txt`, `Pipfile`, `pyproject.toml`, `setup.py` → Python dependencies
@@ -338,12 +365,13 @@ Search the target path for:
 Determine the risk areas:
 - **Infrastructure risk**: IaC files present? → Checkov priority for cloud misconfigurations
 - **Supply chain risk**: Dependencies present? → GuardDog priority (verify before scan)
-- **Code vulnerabilities**: Custom code present? → Language-specific tools
+- **Code vulnerabilities**: Custom code present? → Language-specific tools (ESLint for JS/TS, Bandit for Python, etc.)
+- **JavaScript/TypeScript vulnerabilities**: Web apps or Node.js? → ESLint for XSS, injection, ReDoS
 - **CI/CD security**: Workflow files? → Checkov for workflow security + ShellCheck for embedded shell
 - **Container security**: Dockerfiles? → Checkov for best practices + ShellCheck for RUN commands
 - **Secrets exposure**: Any code/IaC files? → Graudit secrets database + Checkov secrets checks
 - **Untrusted/malicious code**: Unknown origin? → Graudit (exec+secrets) first for quick triage
-- **Framework-specific**: Django/Flask? → Bandit with targeted test IDs
+- **Framework-specific**: Django/Flask? → Bandit with targeted test IDs; React/Vue/Angular? → ESLint with no-unsanitized
 - **Mobile apps**: Android/iOS code? → Graudit (android/ios databases)
 - **Cloud compliance**: SOC2/HIPAA/PCI-DSS? → Checkov with compliance framework flags
 
@@ -463,6 +491,18 @@ When recommending skills, include these optimized commands:
 - With external modules: `checkov -d . --download-external-modules true`
 - List all checks: `checkov --list --framework terraform`
 
+### ESLint
+- Full security scan: `eslint --config .eslintrc.security.json --ext .js,.jsx,.ts,.tsx src/`
+- JSON output: `eslint --format json --output-file results.json src/`
+- Critical issues only: `eslint --rule 'no-eval: error' --rule 'no-implied-eval: error' src/`
+- SARIF report: `eslint --format @microsoft/eslint-formatter-sarif --output-file results.sarif src/`
+- Prevent bypassing: `eslint --no-inline-config src/`
+- Fail on warnings: `eslint --max-warnings 0 src/`
+- React/JSX scan: `eslint --ext .jsx,.tsx --rule 'no-unsanitized/property: error' src/`
+- Node.js backend: `eslint --ext .js,.ts --rule 'security/detect-child-process: error' api/`
+- Quick triage: `eslint --rule 'no-eval: error' --format compact .`
+- All JS/TS files: `eslint --ext .js,.jsx,.ts,.tsx .`
+
 ---
 
 ## Next Steps
@@ -491,6 +531,8 @@ To execute these recommended scans:
 | Use Bandit for non-Python files | Use Graudit with appropriate database |
 | Use GuardDog to scan your own source code | Use Bandit (Python) or Graudit (others) |
 | Use Checkov for application source code | Checkov is for IaC only—use Bandit/Graudit for app code |
+| Use only Graudit for JavaScript when ESLint is available | Use ESLint as primary, Graudit as secondary |
+| Use ESLint for npm package malware detection | ESLint scans source code—use GuardDog for malicious packages |
 | Use only Graudit for Python when Bandit is available | Use Bandit as primary, Graudit as secondary |
 | Use only Graudit for IaC when Checkov is available | Use Checkov as primary for IaC, Graudit for secrets |
 | Skip GuardDog when dependency files exist | Always verify dependencies first |
@@ -518,6 +560,7 @@ When making recommendations, account for these limitations:
 | **Graudit** | Logic flaws, obfuscated/encrypted code beyond patterns, context-dependent vulns | Manual review, combine with AST tools |
 | **Dependency-Check** | Malicious packages (malware), source code vulnerabilities, false positives from CPE matching, zero-day vulnerabilities not yet in NVD | Use GuardDog for malware, Bandit/Graudit for source code, suppression.xml for false positives |
 | **Checkov** | Runtime misconfigurations, logic flaws in application code, dynamic/computed values, actual deployed state vs declared config, secrets in encrypted/base64 beyond patterns | Static analysis only - validate with cloud security posture tools, combine with Graudit for secrets, cannot scan application source code |
+| **ESLint** | Runtime vulnerabilities, sophisticated obfuscation, dependency CVEs, minified code, behavioral analysis, malicious npm packages | Static pattern-based only - add npm audit/Dependency-Check for CVEs, GuardDog for malware, manual review for obfuscated code |
 
 ### Combined Blind Spots
 All tools are static analysis only - they cannot detect:

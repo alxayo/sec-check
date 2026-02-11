@@ -2,6 +2,9 @@
 name: add-new-security-skill
 description: Template prompt for integrating a new security scanning skill into the tools-advisor and malicious-code-scanner systems
 argument-hint: "Provide tool name and of the new skill (e.g., 'checkov')"
+agent: agent
+tools: ['read/problems', 'read/readFile', 'search/codebase', 'search/fileSearch', 'search/textSearch', 'search/usages', 'search/listDirectory', 'todo', 'edit', 'search']
+model: Claude Sonnet 4.5
 ---
 
 # Adding a New Security Scanning Skill

@@ -41,7 +41,11 @@ The `runTerminal` tool may ONLY be used for:
 - ✅ `bandit` - Python security scanner
 - ✅ `guarddog` - Supply chain security scanner
 - ✅ `shellcheck` - Shell script analyzer
-- ✅ `graudit` - Pattern-based scanner- ✅ `checkov` - Infrastructure as Code security scanner- ✅ `mkdir -p .github/.audit` - Creating output directories
+- ✅ `graudit` - Pattern-based scanner
+- ✅ `dependency-check` - Dependency vulnerability scanner
+- ✅ `checkov` - Infrastructure as Code security scanner
+- ✅ `eslint` - JavaScript/TypeScript security scanner
+- ✅ `mkdir -p .github/.audit` - Creating output directories
 - ✅ `which`/`--version` commands - Checking tool availability
 - ✅ `grep`, `find`, `cat`, `head`, `tail` - Reading/searching files (NOT executing them)
 
@@ -81,7 +85,9 @@ When security skills are available in `.github/skills/`, leverage them for compr
 | **GuardDog** | `.github/skills/guarddog-security-scan/SKILL.md` | Supply chain & malware detection (Python/Node.js) |
 | **ShellCheck** | `.github/skills/shellcheck-security-scan/SKILL.md` | Shell script security analysis |
 | **Graudit** | `.github/skills/graudit-security-scan/SKILL.md` | Multi-language pattern matching |
+| **Dependency-Check** | `.github/skills/dependency-check-security-scan/SKILL.md` | Software Composition Analysis (SCA) for known CVEs |
 | **Checkov** | `.github/skills/checkov-security-scan/SKILL.md` | Infrastructure as Code (IaC) security & compliance |
+| **ESLint** | `.github/skills/eslint-security-scan/SKILL.md` | JavaScript/TypeScript security analysis |
 
 **Workflow with skills:**
 1. Check if `.github/skills/` directory exists
@@ -123,7 +129,9 @@ bandit --version 2>/dev/null && echo "✅ Bandit available" || echo "⚠️ Band
 guarddog --version 2>/dev/null && echo "✅ GuardDog available" || echo "⚠️ GuardDog not installed"
 shellcheck --version 2>/dev/null && echo "✅ ShellCheck available" || echo "⚠️ ShellCheck not installed"
 which graudit 2>/dev/null && echo "✅ Graudit available" || echo "⚠️ Graudit not installed"
+dependency-check --version 2>/dev/null && echo "✅ Dependency-Check available" || echo "⚠️ Dependency-Check not installed"
 checkov --version 2>/dev/null && echo "✅ Checkov available" || echo "⚠️ Checkov not installed"
+eslint --version 2>/dev/null && echo "✅ ESLint available" || echo "⚠️ ESLint not installed"
 ```
 
 ### Step 3: Select Operating Mode
@@ -156,6 +164,9 @@ Based on the skills' decision matrices, execute in this order:
 | Python (.py) | `bandit -r .` | `graudit -d secrets` | bandit-security-scan |
 | Python + deps | `guarddog pypi verify` | `bandit -r .` | guarddog-security-scan |
 | Node.js | `guarddog npm scan` | `graudit -d js` | guarddog-security-scan |
+| JavaScript (.js, .jsx) | `eslint --ext .js,.jsx src/` | `graudit -d js,secrets` | eslint-security-scan |
+| TypeScript (.ts, .tsx) | `eslint --ext .ts,.tsx src/` | `graudit -d typescript,secrets` | eslint-security-scan |
+| React/Vue/Angular | `eslint --ext .jsx,.tsx src/` | `graudit -d xss,secrets` | eslint-security-scan |
 | Shell (.sh) | `shellcheck` | `graudit -d exec` | shellcheck-security-scan |
 | Terraform (.tf) | `checkov -d . --framework terraform` | `graudit -d secrets` | checkov-security-scan |
 | Kubernetes (manifests) | `checkov -d . --framework kubernetes` | `graudit -d secrets` | checkov-security-scan |
@@ -562,7 +573,9 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | guarddog-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | shellcheck-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | graudit-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
+| dependency-check-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | checkov-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
+| eslint-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 
 ### Limitations (if Standalone Mode)
 [List any detection limitations due to missing tools]
@@ -622,7 +635,9 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | GuardDog | `.github/skills/guarddog-security-scan/SKILL.md` |
 | ShellCheck | `.github/skills/shellcheck-security-scan/SKILL.md` |
 | Graudit | `.github/skills/graudit-security-scan/SKILL.md` |
+| Dependency-Check | `.github/skills/dependency-check-security-scan/SKILL.md` |
 | Checkov | `.github/skills/checkov-security-scan/SKILL.md` |
+| ESLint | `.github/skills/eslint-security-scan/SKILL.md` |
 
 ### If Skills Are Missing:
 
