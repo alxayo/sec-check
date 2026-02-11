@@ -138,6 +138,35 @@ Review these skills from the `.github/skills/` folder:
 - **NOT for**: Malicious package detection (use GuardDog), source code vulnerabilities (use Bandit/Graudit)
 - **Key distinction from GuardDog**: Dependency-Check detects **known CVEs** in dependencies; GuardDog detects **malicious packages/malware**
 
+### 6. Checkov Security Scan
+- **Skill**: `checkov-security-scan`
+- **Skill file**: [.github/skills/checkov-security-scan/SKILL.md](.github/skills/checkov-security-scan/SKILL.md)
+- **Purpose**: Infrastructure as Code (IaC) security misconfiguration and compliance violation detection
+- **Supported frameworks**:
+  - **Terraform**: `.tf`, `.tf.json`, plan files
+  - **CloudFormation**: `.yaml`, `.yml`, `.json`, `.template` templates
+  - **Kubernetes**: Manifests, Helm charts, Kustomize
+  - **Dockerfile**: `Dockerfile`, `Dockerfile.*`
+  - **ARM/Bicep**: Azure templates
+  - **CI/CD**: GitHub Actions (`.github/workflows/*.yml`), GitLab CI (`.gitlab-ci.yml`), Azure Pipelines, CircleCI, Bitbucket
+  - **Other**: Ansible, Argo Workflows, Serverless Framework, OpenAPI/Swagger
+- **Detection capabilities**:
+  - Overly permissive IAM policies and access controls
+  - Unencrypted storage (S3, EBS, RDS, Azure Storage, GCS)
+  - Publicly accessible resources (security groups, storage buckets)
+  - Security group misconfigurations (open ports 22, 3389, etc.)
+  - Container security issues (privileged mode, root user)
+  - Missing health checks, logging, and monitoring
+  - Hardcoded secrets in IaC configuration
+  - CI/CD workflow security issues (unpinned actions, shell injection)
+- **Check categories**: 1000+ built-in checks (CKV_AWS_*, CKV_AZURE_*, CKV_GCP_*, CKV_K8S_*, CKV_DOCKER_*, CKV_GHA_*, CKV_SECRET_*)
+- **Output formats**: CLI, JSON, SARIF, JUnit XML, CycloneDX SBOM
+- **Compliance frameworks**: CIS benchmarks, SOC2, HIPAA, PCI-DSS, ISO 27001
+- **MITRE ATT&CK mapped**: Yes (T1530, T1078, T1046, T1190, T1562, T1552, T1610)
+- **Best for**: IaC security audits, pre-deployment validation, cloud misconfiguration detection, compliance scanning, CI/CD security gates
+- **NOT for**: Application source code vulnerabilities (use Bandit/Graudit), dependency/package audits (use GuardDog/Dependency-Check)
+- **Key distinction**: Checkov scans **infrastructure configuration** for misconfigurations; other tools scan **application code** for vulnerabilities
+
 ---
 
 ## Quick Decision Flowchart
@@ -150,6 +179,15 @@ START: What's the primary concern?
 ├─► "Is code UNTRUSTED or potentially MALICIOUS?"
 │   └─► YES → Graudit (exec+secrets) FIRST, then others
 │
+├─► "Are there INFRASTRUCTURE AS CODE (IaC) files?"
+│   ├─► Terraform (.tf) → Checkov --framework terraform
+│   ├─► Kubernetes manifests → Checkov --framework kubernetes
+│   ├─► CloudFormation (.yaml/.json) → Checkov --framework cloudformation
+│   ├─► Dockerfile → Checkov --framework dockerfile
+│   ├─► Helm charts → Checkov --framework helm
+│   ├─► GitHub Actions workflows → Checkov --framework github_actions
+│   └─► Mixed IaC → Checkov -d . (auto-detect)
+│
 ├─► "Are there DEPENDENCY FILES?" (requirements.txt, package.json, etc.)
 │   ├─► Need MALWARE/supply chain attack detection?
 │   │   └─► YES → GuardDog verify FIRST
@@ -158,7 +196,8 @@ START: What's the primary concern?
 │   (For comprehensive audit: run BOTH GuardDog + Dependency-Check)
 │
 ├─► "Is COMPLIANCE required?" (SOC2, PCI-DSS, HIPAA)
-│   └─► YES → Dependency-Check with --failOnCVSS threshold
+│   ├─► IaC compliance → Checkov with compliance framework flags
+│   └─► Dependency compliance → Dependency-Check with --failOnCVSS threshold
 │
 ├─► "What LANGUAGE is the code?"
 │   ├─► Python (.py) → Bandit (primary) + Graudit (secrets)
@@ -168,8 +207,11 @@ START: What's the primary concern?
 │   ├─► Mixed/Unknown → Graudit (default) first, then language-specific
 │   └─► Other (PHP, etc.) → Graudit (language-specific db)
 │
-└─► "Are there CI/CD or INFRASTRUCTURE files?"
-    └─► YES → ShellCheck for shell in workflows/Dockerfiles
+└─► "Are there CI/CD or BUILD files?"
+    ├─► GitHub Actions workflows → Checkov --framework github_actions
+    ├─► GitLab CI (.gitlab-ci.yml) → Checkov --framework gitlab_ci
+    ├─► Dockerfile → Checkov --framework dockerfile + ShellCheck for RUN commands
+    └─► Shell scripts in CI → ShellCheck + Graudit (exec)
 ```
 
 ---
@@ -195,7 +237,15 @@ Use this matrix to determine optimal skill selection:
 | **Unknown/untrusted** | Graudit (exec, secrets) | All applicable tools | Quick triage |
 | **Mobile (Android/iOS)** | Graudit (android/ios) | Graudit (secrets) | Platform-specific |
 | **PHP** | Graudit (php) | Dependency-Check (experimental), Graudit (secrets, sql) | CVE + pattern matching |
-| **Compliance required** | Dependency-Check (--failOnCVSS) | All applicable source scanners | CVE gates + code review |
+| **Terraform** | Checkov (--framework terraform) | Graudit (secrets) | IaC misconfiguration detection |
+| **CloudFormation** | Checkov (--framework cloudformation) | Graudit (secrets) | AWS IaC security |
+| **Kubernetes manifests** | Checkov (--framework kubernetes) | Graudit (secrets) | K8s security policies |
+| **Dockerfile** | Checkov (--framework dockerfile) | ShellCheck (RUN commands), Graudit (secrets) | Container best practices |
+| **Helm charts** | Checkov (--framework helm) | Graudit (secrets) | Helm security |
+| **GitHub Actions** | Checkov (--framework github_actions) | ShellCheck (run steps), Graudit (exec, secrets) | CI/CD workflow security |
+| **GitLab CI** | Checkov (--framework gitlab_ci) | ShellCheck (scripts), Graudit (exec, secrets) | CI/CD pipeline security |
+| **Mixed IaC + code** | Checkov (IaC) → Language-specific | All applicable tools | Infrastructure + application |
+| **Compliance required** | Dependency-Check (--failOnCVSS) + Checkov (IaC) | All applicable source scanners | CVE gates + IaC compliance + code review |
 
 ---
 
@@ -204,13 +254,15 @@ Use this matrix to determine optimal skill selection:
 When multiple tools could apply, use these priority rules:
 
 1. **Untrusted code always wins**: If origin is unknown/suspicious → Start with Graudit (exec+secrets)
-2. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check (CVEs) before scanning source
-3. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check (CVEs) for comprehensive supply chain security
-4. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit
-5. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
-6. **Specificity over generality**: Language-specific database > `default` database
-7. **Compliance requirements**: If SOC2/PCI-DSS/HIPAA required → Dependency-Check with `--failOnCVSS` is mandatory
-8. **Java/.NET projects**: Dependency-Check is primary for dependencies (strongest support for these ecosystems)
+2. **IaC before application code**: If IaC files exist → Checkov FIRST to catch infrastructure misconfigurations
+3. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check (CVEs) before scanning source
+4. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check (CVEs) for comprehensive supply chain security
+5. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit; for IaC use Checkov over Graudit
+6. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
+7. **Specificity over generality**: Framework-specific tool > Language-specific database > `default` database
+8. **Compliance requirements**: If SOC2/PCI-DSS/HIPAA required → Dependency-Check with `--failOnCVSS` + Checkov for IaC compliance
+9. **Java/.NET projects**: Dependency-Check is primary for dependencies (strongest support for these ecosystems)
+10. **Cloud deployments**: Always run Checkov for Terraform/CloudFormation/K8s before deployment
 
 ---
 
@@ -225,9 +277,11 @@ When time is limited, prioritize scans based on risk profile:
 | **Routine Audit** (own code) | 1. Language-specific → 2. Graudit (secrets) | 5-10 min |
 | **Deep Analysis** (security review) | All tools, all databases | 15-30 min |
 | **Supply Chain Focus** | 1. GuardDog verify → 2. Dependency-Check → 3. Graudit (secrets) | 5-15 min |
-| **Compliance Audit** (SOC2/PCI-DSS) | 1. Dependency-Check (--failOnCVSS 7) → 2. All source scanners | 10-20 min |
+| **Compliance Audit** (SOC2/PCI-DSS) | 1. Dependency-Check (--failOnCVSS 7) → 2. Checkov (IaC) → 3. All source scanners | 15-25 min |
 | **Java/.NET Enterprise** | 1. Dependency-Check → 2. Graudit (language+secrets) | 5-15 min |
-| **Pre-Deployment Gate** | 1. Dependency-Check (--failOnCVSS 7) → 2. GuardDog verify → 3. Source scan | 10-20 min |
+| **Pre-Deployment Gate** | 1. Checkov (IaC) → 2. Dependency-Check (--failOnCVSS 7) → 3. GuardDog verify → 4. Source scan | 15-25 min |
+| **IaC Security Audit** | 1. Checkov (all frameworks) → 2. Graudit (secrets) | 5-10 min |
+| **Cloud Migration** | 1. Checkov (--framework terraform,cloudformation) → 2. All applicable tools | 10-20 min |
 
 ---
 
@@ -259,8 +313,22 @@ Search the target path for:
 - `pom.xml`, `build.gradle` → Java dependencies
 - `composer.json` → PHP dependencies
 
+**Infrastructure as Code (IaC) Files**:
+- `.tf`, `.tf.json` → Terraform configurations
+- `.yaml`, `.yml`, `.json`, `.template` (in cloud dirs) → CloudFormation templates
+- Kubernetes manifests (deployments, services, pods, etc.)
+- `Dockerfile`, `Dockerfile.*` → Container definitions
+- `Chart.yaml`, `values.yaml` (in Helm directories) → Helm charts
+- `kustomization.yaml` → Kustomize
+- `.bicep` → Azure Bicep templates
+- `serverless.yml` → Serverless Framework
+
 **CI/CD & Build Files**:
-- `.github/workflows/*.yml` → GitHub Actions (may contain shell)
+- `.github/workflows/*.yml` → GitHub Actions (may contain shell + IaC)
+- `.gitlab-ci.yml` → GitLab CI
+- `azure-pipelines.yml` → Azure Pipelines
+- `.circleci/config.yml` → CircleCI
+- `bitbucket-pipelines.yml` → Bitbucket Pipelines
 - `Dockerfile`, `.dockerignore` → Docker (shell commands in RUN)
 - `Makefile` → Make (shell commands)
 - `Jenkinsfile` → Jenkins (Groovy + shell)
@@ -268,13 +336,16 @@ Search the target path for:
 ### Step 2: Assess Risk Profile
 
 Determine the risk areas:
+- **Infrastructure risk**: IaC files present? → Checkov priority for cloud misconfigurations
 - **Supply chain risk**: Dependencies present? → GuardDog priority (verify before scan)
 - **Code vulnerabilities**: Custom code present? → Language-specific tools
-- **Infrastructure risk**: Shell/CI files? → ShellCheck priority
-- **Secrets exposure**: Any code files? → Graudit secrets database
+- **CI/CD security**: Workflow files? → Checkov for workflow security + ShellCheck for embedded shell
+- **Container security**: Dockerfiles? → Checkov for best practices + ShellCheck for RUN commands
+- **Secrets exposure**: Any code/IaC files? → Graudit secrets database + Checkov secrets checks
 - **Untrusted/malicious code**: Unknown origin? → Graudit (exec+secrets) first for quick triage
 - **Framework-specific**: Django/Flask? → Bandit with targeted test IDs
 - **Mobile apps**: Android/iOS code? → Graudit (android/ios databases)
+- **Cloud compliance**: SOC2/HIPAA/PCI-DSS? → Checkov with compliance framework flags
 
 ### Step 2.5: Check for Red Flags (Escalate to Urgent Triage)
 
@@ -377,6 +448,21 @@ When recommending skills, include these optimized commands:
 - Docker scan: `docker run -v $(pwd):/src owasp/dependency-check --scan /src --out /src/reports`
 - Quick scan (cached DB): `dependency-check.sh --scan ./ --noupdate --format HTML --out ./reports`
 
+### Checkov
+- Quick IaC scan: `checkov -d . --compact`
+- Terraform specific: `checkov -d . --framework terraform`
+- Kubernetes manifests: `checkov -d ./k8s --framework kubernetes`
+- Dockerfile security: `checkov -f Dockerfile --framework dockerfile`
+- GitHub Actions: `checkov -d .github/workflows --framework github_actions`
+- Multiple frameworks: `checkov -d . --framework terraform,kubernetes,dockerfile`
+- JSON output: `checkov -d . -o json -o cli --output-file-path results.json,console`
+- SARIF for CI/CD: `checkov -d . -o sarif --output-file-path results.sarif`
+- Fail on HIGH/CRITICAL: `checkov -d . --hard-fail-on HIGH,CRITICAL`
+- Skip specific checks: `checkov -d . --skip-check CKV_AWS_1,CKV_DOCKER_7`
+- Terraform plan scan: `terraform show -json tfplan > tfplan.json && checkov -f tfplan.json --framework terraform_plan`
+- With external modules: `checkov -d . --download-external-modules true`
+- List all checks: `checkov --list --framework terraform`
+
 ---
 
 ## Next Steps
@@ -404,15 +490,19 @@ To execute these recommended scans:
 |----------|---------------|
 | Use Bandit for non-Python files | Use Graudit with appropriate database |
 | Use GuardDog to scan your own source code | Use Bandit (Python) or Graudit (others) |
+| Use Checkov for application source code | Checkov is for IaC only—use Bandit/Graudit for app code |
 | Use only Graudit for Python when Bandit is available | Use Bandit as primary, Graudit as secondary |
+| Use only Graudit for IaC when Checkov is available | Use Checkov as primary for IaC, Graudit for secrets |
 | Skip GuardDog when dependency files exist | Always verify dependencies first |
+| Skip Checkov when IaC files exist | Always scan IaC before deployment |
 | Use ShellCheck alone for obfuscated scripts | Add Graudit (exec) for base64/hex patterns |
 | Recommend `graudit -d default` when language is known | Use language-specific database |
-| Skip secrets scan | Always include Graudit (secrets) as secondary |
+| Skip secrets scan | Always include Graudit (secrets) + Checkov secrets checks |
 | Use GuardDog alone for CVE detection | GuardDog detects malware, not CVEs—add Dependency-Check |
 | Use Dependency-Check for malware detection | Dependency-Check detects CVEs, not malware—add GuardDog |
 | Skip Dependency-Check for Java/.NET projects | These ecosystems have strongest Dependency-Check support |
-| Ignore compliance requirements | Use Dependency-Check with --failOnCVSS for SOC2/PCI-DSS/HIPAA |
+| Skip Checkov for Terraform/K8s/CloudFormation | These are primary Checkov targets |
+| Ignore compliance requirements | Use Dependency-Check with --failOnCVSS + Checkov for IaC compliance |
 
 ---
 
@@ -427,6 +517,7 @@ When making recommendations, account for these limitations:
 | **ShellCheck** | Base64/hex obfuscated payloads, dynamic payload generation, embedded Python/Perl/Ruby | Add `graudit -d exec`, run in sandbox |
 | **Graudit** | Logic flaws, obfuscated/encrypted code beyond patterns, context-dependent vulns | Manual review, combine with AST tools |
 | **Dependency-Check** | Malicious packages (malware), source code vulnerabilities, false positives from CPE matching, zero-day vulnerabilities not yet in NVD | Use GuardDog for malware, Bandit/Graudit for source code, suppression.xml for false positives |
+| **Checkov** | Runtime misconfigurations, logic flaws in application code, dynamic/computed values, actual deployed state vs declared config, secrets in encrypted/base64 beyond patterns | Static analysis only - validate with cloud security posture tools, combine with Graudit for secrets, cannot scan application source code |
 
 ### Combined Blind Spots
 All tools are static analysis only - they cannot detect:

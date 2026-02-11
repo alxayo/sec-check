@@ -1,4 +1,3 @@
-```skill
 ---
 name: checkov-security-scan
 description: Scan Infrastructure as Code (IaC) for security misconfigurations and compliance violations using Checkov. (1) Primary use for Terraform, CloudFormation, Kubernetes manifests, Dockerfiles, Helm charts, ARM/Bicep templates, GitHub Actions, GitLab CI, and CI/CD pipelines. (2) Detects cloud misconfigurations, exposed secrets, overly permissive IAM policies, unencrypted storage, public access risks, container security issues. (3) Use for IaC security audits, compliance scanning (CIS, SOC2, HIPAA, PCI-DSS), pre-deployment validation, CI/CD security gates. Do NOT use for application source code vulnerabilities (use bandit, graudit) or dependency/package audits (use guarddog, dependency-check).
