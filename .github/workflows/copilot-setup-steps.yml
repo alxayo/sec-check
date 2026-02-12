@@ -43,6 +43,14 @@ jobs:
           java-version: "17"
 
       # ============================================================
+      # NODE.JS SETUP (Required for ESLint security scanning)
+      # ============================================================
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ============================================================
       # GRAUDIT SECURITY SCANNER
       # Grep-based source code auditing tool for detecting dangerous
       # patterns, command injection, hardcoded secrets, and more.
@@ -108,6 +116,93 @@ jobs:
           checkov --list | head -50
 
       # ============================================================
+      # GUARDDOG SECURITY SCANNER
+      # Detects malicious packages and supply chain attacks in
+      # Python (PyPI) and Node.js (npm) ecosystems.
+      # https://github.com/DataDog/guarddog
+      # ============================================================
+      - name: Install GuardDog
+        run: |
+          echo "Installing GuardDog Security Scanner..."
+          pip install guarddog
+
+      - name: Verify GuardDog installation
+        run: |
+          guarddog --version
+          echo "GuardDog is ready for scanning PyPI and npm packages"
+
+      # ============================================================
+      # BANDIT SECURITY SCANNER
+      # Python source code security linter that finds common
+      # security issues using AST analysis.
+      # https://github.com/PyCQA/bandit
+      # ============================================================
+      - name: Install Bandit
+        run: |
+          echo "Installing Bandit Security Scanner..."
+          pip install bandit[toml]
+
+      - name: Verify Bandit installation
+        run: |
+          bandit --version
+          echo "Bandit is ready for Python security scanning"
+
+      # ============================================================
+      # SHELLCHECK
+      # Static analysis tool for shell scripts that identifies
+      # bugs, security issues, and dangerous patterns.
+      # https://github.com/koalaman/shellcheck
+      # ============================================================
+      - name: Install ShellCheck
+        run: |
+          echo "Installing ShellCheck..."
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Verify ShellCheck installation
+        run: |
+          shellcheck --version
+
+      # ============================================================
+      # TRIVY SECURITY SCANNER
+      # Comprehensive security scanner for containers, filesystems,
+      # IaC, and more. Detects CVEs, misconfigurations, and secrets.
+      # https://github.com/aquasecurity/trivy
+      # ============================================================
+      - name: Install Trivy
+        run: |
+          echo "Installing Trivy Security Scanner..."
+          # Install via script for latest version
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Verify Trivy installation
+        run: |
+          trivy --version
+          echo "Trivy scanners available: vuln, misconfig, secret, license"
+
+      # ============================================================
+      # ESLINT WITH SECURITY PLUGINS
+      # JavaScript/TypeScript security analysis with security-focused
+      # plugins for detecting injection, XSS, and dangerous patterns.
+      # https://github.com/eslint/eslint
+      # ============================================================
+      - name: Install ESLint with security plugins
+        run: |
+          echo "Installing ESLint with security plugins..."
+          npm install -g \
+            eslint \
+            eslint-plugin-security \
+            eslint-plugin-no-unsanitized \
+            @typescript-eslint/parser \
+            @typescript-eslint/eslint-plugin
+
+      - name: Verify ESLint installation
+        run: |
+          eslint --version
+          echo "ESLint security plugins installed:"
+          npm list -g eslint-plugin-security eslint-plugin-no-unsanitized --depth=0
+
+      # ============================================================
       # FINAL VERIFICATION
       # ============================================================
       - name: Verify all security tools are available
@@ -128,6 +223,26 @@ jobs:
           which checkov
           checkov --version
           echo ""
-          echo "=========================================="
-          echo "All security scanning tools installed successfully!"
+          echo "4. GuardDog:"
+          which guarddog
+          guarddog --version
+          echo ""
+          echo "5. Bandit:"
+          which bandit
+          bandit --version
+          echo ""
+          echo "6. ShellCheck:"
+          which shellcheck
+          shellcheck --version | head -2
+          echo ""
+          echo "7. Trivy:"
+          which trivy
+          trivy --version
+          echo ""
+          echo "8. ESLint:"
+          which eslint
+          eslint --version
+          echo ""
+          echo "========================================="
+          echo "All 8 security scanning tools installed successfully!"
           echo "=========================================="
