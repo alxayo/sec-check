@@ -205,20 +205,26 @@ START: What's the primary concern?
 │   └─► YES → Graudit (exec+secrets) FIRST, then others
 │
 ├─► "Are there INFRASTRUCTURE AS CODE (IaC) files?"
-│   ├─► Terraform (.tf) → Checkov --framework terraform
-│   ├─► Kubernetes manifests → Checkov --framework kubernetes
-│   ├─► CloudFormation (.yaml/.json) → Checkov --framework cloudformation
-│   ├─► Dockerfile → Checkov --framework dockerfile
-│   ├─► Helm charts → Checkov --framework helm
+│   ├─► Terraform (.tf) → Checkov --framework terraform + Trivy config
+│   ├─► Kubernetes manifests → Checkov --framework kubernetes + Trivy config
+│   ├─► CloudFormation (.yaml/.json) → Checkov --framework cloudformation + Trivy config
+│   ├─► Dockerfile → Checkov --framework dockerfile + Trivy config
+│   ├─► Helm charts → Checkov --framework helm + Trivy config
 │   ├─► GitHub Actions workflows → Checkov --framework github_actions
-│   └─► Mixed IaC → Checkov -d . (auto-detect)
+│   └─► Mixed IaC → Checkov -d . (auto-detect) + Trivy config
+│
+├─► "Are there CONTAINER IMAGES or Docker projects?"
+│   ├─► Docker images → Trivy image <image-name> (primary)
+│   ├─► Dockerfile only → Trivy config + Checkov (complementary)
+│   └─► Project directory → Trivy fs --scanners vuln,secret
 │
 ├─► "Are there DEPENDENCY FILES?" (requirements.txt, package.json, etc.)
 │   ├─► Need MALWARE/supply chain attack detection?
 │   │   └─► YES → GuardDog verify FIRST
-│   └─► Need KNOWN CVE/vulnerability detection?
-│       └─► YES → Dependency-Check FIRST
-│   (For comprehensive audit: run BOTH GuardDog + Dependency-Check)
+│   ├─► Need KNOWN CVE/vulnerability detection?
+│   │   ├─► Container project → Trivy fs --scanners vuln
+│   │   └─► Traditional project → Dependency-Check FIRST
+│   (For comprehensive audit: GuardDog + Dependency-Check/Trivy)
 │
 ├─► "Is COMPLIANCE required?" (SOC2, PCI-DSS, HIPAA)
 │   ├─► IaC compliance → Checkov with compliance framework flags
@@ -267,12 +273,16 @@ Use this matrix to determine optimal skill selection:
 | **Terraform** | Checkov (--framework terraform) | Graudit (secrets) | IaC misconfiguration detection |
 | **CloudFormation** | Checkov (--framework cloudformation) | Graudit (secrets) | AWS IaC security |
 | **Kubernetes manifests** | Checkov (--framework kubernetes) | Graudit (secrets) | K8s security policies |
-| **Dockerfile** | Checkov (--framework dockerfile) | ShellCheck (RUN commands), Graudit (secrets) | Container best practices |
-| **Helm charts** | Checkov (--framework helm) | Graudit (secrets) | Helm security |
+| **Dockerfile** | Trivy config + Checkov (--framework dockerfile) | ShellCheck (RUN commands), Graudit (secrets) | Container best practices |
+| **Container images** | Trivy image <image> (primary) | N/A | Container CVE scanning |
+| **Helm charts** | Checkov (--framework helm) + Trivy config | Graudit (secrets) | Helm security |
+| **Kubernetes cluster** | Trivy k8s cluster | Checkov (manifests) | Live cluster assessment |
 | **GitHub Actions** | Checkov (--framework github_actions) | ShellCheck (run steps), Graudit (exec, secrets) | CI/CD workflow security |
 | **GitLab CI** | Checkov (--framework gitlab_ci) | ShellCheck (scripts), Graudit (exec, secrets) | CI/CD pipeline security |
-| **Mixed IaC + code** | Checkov (IaC) → Language-specific | All applicable tools | Infrastructure + application |
-| **Compliance required** | Dependency-Check (--failOnCVSS) + Checkov (IaC) | All applicable source scanners | CVE gates + IaC compliance + code review |
+| **Container project + deps** | Trivy fs --scanners vuln,secret | GuardDog verify, language-specific | Cloud-native dependency scanning |
+| **Mixed IaC + code** | Checkov (IaC) + Trivy config → Language-specific | All applicable tools | Infrastructure + application |
+| **Cloud-native project** | Trivy image/fs/config | Checkov (detailed IaC), GuardDog, language-specific | Containers + IaC + dependencies |
+| **Compliance required** | Trivy/Dependency-Check (severity filter) + Checkov | All source scanners | CVE gates + IaC compliance |
 
 ---
 
@@ -281,15 +291,17 @@ Use this matrix to determine optimal skill selection:
 When multiple tools could apply, use these priority rules:
 
 1. **Untrusted code always wins**: If origin is unknown/suspicious → Start with Graudit (exec+secrets)
-2. **IaC before application code**: If IaC files exist → Checkov FIRST to catch infrastructure misconfigurations
-3. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check (CVEs) before scanning source
-4. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check (CVEs) for comprehensive supply chain security
-5. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit; for IaC use Checkov over Graudit
-6. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
-7. **Specificity over generality**: Framework-specific tool > Language-specific database > `default` database
-8. **Compliance requirements**: If SOC2/PCI-DSS/HIPAA required → Dependency-Check with `--failOnCVSS` + Checkov for IaC compliance
-9. **Java/.NET projects**: Dependency-Check is primary for dependencies (strongest support for these ecosystems)
-10. **Cloud deployments**: Always run Checkov for Terraform/CloudFormation/K8s before deployment
+2. **Containers first**: If container images exist → Trivy image scan FIRST for CVEs before deployment
+3. **IaC before application code**: If IaC files exist → Checkov + Trivy config to catch infrastructure misconfigurations
+4. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check/Trivy (CVEs) before scanning source
+5. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check/Trivy (CVEs) for comprehensive supply chain security
+6. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit; for IaC use Checkov+Trivy over Graudit
+7. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
+8. **Specificity over generality**: Framework-specific tool > Language-specific database > `default` database
+9. **Compliance requirements**: If SOC2/PCI-DSS/HIPAA required → Trivy/Dependency-Check with severity thresholds + Checkov for IaC compliance
+10. **Java/.NET projects**: Dependency-Check is primary for dependencies (strongest support for these ecosystems)
+11. **Cloud-native projects**: Trivy for containers + CVEs + IaC; Checkov for detailed IaC policy; Dependency-Check for traditional apps
+12. **Kubernetes deployments**: Trivy k8s for live cluster scanning + Checkov for manifest validation
 
 ---
 
@@ -301,14 +313,16 @@ When time is limited, prioritize scans based on risk profile:
 |--------------|------------|---------------|
 | **Urgent Triage** (incident response) | 1. Graudit (exec+secrets) → 2. GuardDog verify | < 2 min |
 | **Pre-Installation** (new dependency) | 1. GuardDog scan \<pkg\> → 2. Graudit (exec) | < 1 min |
+| **Container Security** (pre-deployment) | 1. Trivy image → 2. Trivy config (Dockerfile) | 2-5 min |
 | **Routine Audit** (own code) | 1. Language-specific → 2. Graudit (secrets) | 5-10 min |
 | **Deep Analysis** (security review) | All tools, all databases | 15-30 min |
-| **Supply Chain Focus** | 1. GuardDog verify → 2. Dependency-Check → 3. Graudit (secrets) | 5-15 min |
-| **Compliance Audit** (SOC2/PCI-DSS) | 1. Dependency-Check (--failOnCVSS 7) → 2. Checkov (IaC) → 3. All source scanners | 15-25 min |
+| **Supply Chain Focus** | 1. GuardDog verify → 2. Trivy fs/Dependency-Check → 3. Graudit (secrets) | 5-15 min |
+| **Compliance Audit** (SOC2/PCI-DSS) | 1. Trivy/Dependency-Check (severity filter) → 2. Checkov (IaC) → 3. Source scanners | 15-25 min |
 | **Java/.NET Enterprise** | 1. Dependency-Check → 2. Graudit (language+secrets) | 5-15 min |
-| **Pre-Deployment Gate** | 1. Checkov (IaC) → 2. Dependency-Check (--failOnCVSS 7) → 3. GuardDog verify → 4. Source scan | 15-25 min |
-| **IaC Security Audit** | 1. Checkov (all frameworks) → 2. Graudit (secrets) | 5-10 min |
-| **Cloud Migration** | 1. Checkov (--framework terraform,cloudformation) → 2. All applicable tools | 10-20 min |
+| **Container Pre-Deployment** | 1. Trivy image (--exit-code 1) → 2. Checkov (IaC) → 3. GuardDog verify | 5-15 min |
+| **IaC Security Audit** | 1. Checkov (all frameworks) + Trivy config → 2. Graudit (secrets) | 5-10 min |
+| **Cloud-Native Deployment** | 1. Trivy image → 2. Trivy config → 3. Checkov → 4. Trivy k8s | 15-25 min |
+| **Kubernetes Audit** | 1. Trivy k8s cluster → 2. Checkov (manifests) → 3. Graudit (secrets) | 10-15 min |
 
 ---
 
@@ -335,10 +349,17 @@ Search the target path for:
 **Dependency Files**:
 - `requirements.txt`, `Pipfile`, `pyproject.toml`, `setup.py` → Python dependencies
 - `package.json`, `package-lock.json`, `yarn.lock` → Node.js dependencies
-- `Gemfile` → Ruby dependencies
-- `go.mod` → Go dependencies
+- `Gemfile`, `Gemfile.lock` → Ruby dependencies
+- `go.mod`, `go.sum` → Go dependencies
 - `pom.xml`, `build.gradle` → Java dependencies
-- `composer.json` → PHP dependencies
+- `composer.json`, `composer.lock` → PHP dependencies
+- `Cargo.toml`, `Cargo.lock` → Rust dependencies
+
+**Container & Cloud-Native Files**:
+- `Dockerfile`, `Dockerfile.*`, `.dockerignore` → Container definitions (use Trivy config + Checkov)
+- `docker-compose.yml`, `docker-compose.yaml` → Docker Compose (use Trivy config + Checkov)
+- Container images (if Docker daemon available) → Scan with Trivy image
+- SBOM files (`.spdx.json`, `.cdx.json`, `sbom.json`) → Scan with Trivy sbom
 
 **Infrastructure as Code (IaC) Files**:
 - `.tf`, `.tf.json` → Terraform configurations
@@ -363,17 +384,20 @@ Search the target path for:
 ### Step 2: Assess Risk Profile
 
 Determine the risk areas:
-- **Infrastructure risk**: IaC files present? → Checkov priority for cloud misconfigurations
-- **Supply chain risk**: Dependencies present? → GuardDog priority (verify before scan)
+- **Container risk**: Container images or Docker projects? → Trivy image/fs scan FIRST for CVEs and secrets
+- **Infrastructure risk**: IaC files present? → Checkov + Trivy config for cloud misconfigurations
+- **Kubernetes risk**: K8s manifests or live cluster? → Trivy k8s + Checkov for security policies
+- **Supply chain risk**: Dependencies present? → GuardDog (malware) + Trivy fs/Dependency-Check (CVEs)
 - **Code vulnerabilities**: Custom code present? → Language-specific tools (ESLint for JS/TS, Bandit for Python, etc.)
 - **JavaScript/TypeScript vulnerabilities**: Web apps or Node.js? → ESLint for XSS, injection, ReDoS
 - **CI/CD security**: Workflow files? → Checkov for workflow security + ShellCheck for embedded shell
-- **Container security**: Dockerfiles? → Checkov for best practices + ShellCheck for RUN commands
-- **Secrets exposure**: Any code/IaC files? → Graudit secrets database + Checkov secrets checks
+- **Container security**: Dockerfiles? → Trivy config + Checkov for best practices
+- **Secrets exposure**: Any code/IaC files? → Trivy secret scanner + Graudit secrets + Checkov secrets checks
+- **License compliance**: Cloud-native project? → Trivy license scanner for SBOM
 - **Untrusted/malicious code**: Unknown origin? → Graudit (exec+secrets) first for quick triage
 - **Framework-specific**: Django/Flask? → Bandit with targeted test IDs; React/Vue/Angular? → ESLint with no-unsanitized
 - **Mobile apps**: Android/iOS code? → Graudit (android/ios databases)
-- **Cloud compliance**: SOC2/HIPAA/PCI-DSS? → Checkov with compliance framework flags
+- **Cloud compliance**: SOC2/HIPAA/PCI-DSS? → Trivy/Dependency-Check with severity thresholds + Checkov with compliance flags
 
 ### Step 2.5: Check for Red Flags (Escalate to Urgent Triage)
 
@@ -503,6 +527,27 @@ When recommending skills, include these optimized commands:
 - Quick triage: `eslint --rule 'no-eval: error' --format compact .`
 - All JS/TS files: `eslint --ext .js,.jsx,.ts,.tsx .`
 
+### Trivy
+- Scan container image: `trivy image python:3.12-alpine`
+- Scan local image: `trivy image myapp:latest`
+- Filesystem scan (all): `trivy fs --scanners vuln,secret,misconfig ./`
+- Filesystem CVEs only: `trivy fs --scanners vuln ./`
+- Secrets only: `trivy fs --scanners secret ./`
+- IaC misconfigurations: `trivy config ./terraform/`
+- Kubernetes manifests: `trivy config ./k8s/`
+- Scan Git repo: `trivy repo https://github.com/org/repo`
+- Kubernetes cluster: `trivy k8s --report summary cluster`
+- JSON output: `trivy image --format json -o results.json alpine:latest`
+- SARIF for CI/CD: `trivy image --format sarif -o trivy.sarif myapp:latest`
+- Critical only: `trivy image --severity CRITICAL myapp:latest`
+- High+Critical: `trivy image --severity HIGH,CRITICAL myapp:latest`
+- CI/CD gate: `trivy image --exit-code 1 --severity CRITICAL myapp:latest`
+- Ignore unfixed: `trivy image --ignore-unfixed alpine:latest`
+- Multiple scanners: `trivy fs --scanners vuln,secret,misconfig,license ./`
+- Generate SBOM: `trivy image --format spdx-json -o sbom.json nginx:latest`
+- Scan SBOM: `trivy sbom ./sbom.spdx.json`
+- Dockerfile only: `trivy config ./Dockerfile`
+
 ---
 
 ## Next Steps
@@ -544,7 +589,12 @@ To execute these recommended scans:
 | Use Dependency-Check for malware detection | Dependency-Check detects CVEs, not malware—add GuardDog |
 | Skip Dependency-Check for Java/.NET projects | These ecosystems have strongest Dependency-Check support |
 | Skip Checkov for Terraform/K8s/CloudFormation | These are primary Checkov targets |
-| Ignore compliance requirements | Use Dependency-Check with --failOnCVSS + Checkov for IaC compliance |
+| Skip Trivy for container projects | Trivy is the primary tool for container image CVE scanning |
+| Use only Trivy for IaC | Combine Trivy config + Checkov for comprehensive IaC coverage |
+| Use Trivy for Python source code vulnerabilities | Trivy scans packages/CVEs—use Bandit for Python code logic |
+| Use Trivy alone for malware detection | Trivy detects CVEs—add GuardDog for malicious packages |
+| Skip Trivy k8s for Kubernetes cluster audits | Trivy k8s scans live clusters—complement with Checkov for manifests |
+| Ignore compliance requirements | Use Trivy/Dependency-Check with severity filters + Checkov for IaC compliance |
 
 ---
 
@@ -561,6 +611,7 @@ When making recommendations, account for these limitations:
 | **Dependency-Check** | Malicious packages (malware), source code vulnerabilities, false positives from CPE matching, zero-day vulnerabilities not yet in NVD | Use GuardDog for malware, Bandit/Graudit for source code, suppression.xml for false positives |
 | **Checkov** | Runtime misconfigurations, logic flaws in application code, dynamic/computed values, actual deployed state vs declared config, secrets in encrypted/base64 beyond patterns | Static analysis only - validate with cloud security posture tools, combine with Graudit for secrets, cannot scan application source code |
 | **ESLint** | Runtime vulnerabilities, sophisticated obfuscation, dependency CVEs, minified code, behavioral analysis, malicious npm packages | Static pattern-based only - add npm audit/Dependency-Check for CVEs, GuardDog for malware, manual review for obfuscated code |
+| **Trivy** | Python source code logic vulnerabilities, malicious package behavior, sophisticated obfuscation, runtime-only issues, zero-day CVEs not in databases | Static CVE/misconfig scanner only - use Bandit for Python code, GuardDog for malware, cannot detect application logic flaws |
 
 ### Combined Blind Spots
 All tools are static analysis only - they cannot detect:

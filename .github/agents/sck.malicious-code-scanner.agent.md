@@ -45,6 +45,7 @@ The `runTerminal` tool may ONLY be used for:
 - ✅ `dependency-check` - Dependency vulnerability scanner
 - ✅ `checkov` - Infrastructure as Code security scanner
 - ✅ `eslint` - JavaScript/TypeScript security scanner
+- ✅ `trivy` - Container, IaC, and filesystem security scanner
 - ✅ `mkdir -p .github/.audit` - Creating output directories
 - ✅ `which`/`--version` commands - Checking tool availability
 - ✅ `grep`, `find`, `cat`, `head`, `tail` - Reading/searching files (NOT executing them)
@@ -88,6 +89,7 @@ When security skills are available in `.github/skills/`, leverage them for compr
 | **Dependency-Check** | `.github/skills/dependency-check-security-scan/SKILL.md` | Software Composition Analysis (SCA) for known CVEs |
 | **Checkov** | `.github/skills/checkov-security-scan/SKILL.md` | Infrastructure as Code (IaC) security & compliance |
 | **ESLint** | `.github/skills/eslint-security-scan/SKILL.md` | JavaScript/TypeScript security analysis |
+| **Trivy** | `.github/skills/trivy-security-scan/SKILL.md` | Container, IaC, filesystem CVE & secret scanning |
 
 **Workflow with skills:**
 1. Check if `.github/skills/` directory exists
@@ -132,6 +134,7 @@ which graudit 2>/dev/null && echo "✅ Graudit available" || echo "⚠️ Graudi
 dependency-check --version 2>/dev/null && echo "✅ Dependency-Check available" || echo "⚠️ Dependency-Check not installed"
 checkov --version 2>/dev/null && echo "✅ Checkov available" || echo "⚠️ Checkov not installed"
 eslint --version 2>/dev/null && echo "✅ ESLint available" || echo "⚠️ ESLint not installed"
+trivy --version 2>/dev/null && echo "✅ Trivy available" || echo "⚠️ Trivy not installed"
 ```
 
 ### Step 3: Select Operating Mode
@@ -168,11 +171,15 @@ Based on the skills' decision matrices, execute in this order:
 | TypeScript (.ts, .tsx) | `eslint --ext .ts,.tsx src/` | `graudit -d typescript,secrets` | eslint-security-scan |
 | React/Vue/Angular | `eslint --ext .jsx,.tsx src/` | `graudit -d xss,secrets` | eslint-security-scan |
 | Shell (.sh) | `shellcheck` | `graudit -d exec` | shellcheck-security-scan |
-| Terraform (.tf) | `checkov -d . --framework terraform` | `graudit -d secrets` | checkov-security-scan |
-| Kubernetes (manifests) | `checkov -d . --framework kubernetes` | `graudit -d secrets` | checkov-security-scan |
-| Dockerfile | `checkov -f Dockerfile --framework dockerfile` | `shellcheck` (RUN commands) | checkov-security-scan |
+| Container images | `trivy image <image-name>` | N/A | trivy-security-scan |
+| Filesystem (CVE scan) | `trivy fs --scanners vuln ./` | `dependency-check` | trivy-security-scan |
+| Secrets in filesystem | `trivy fs --scanners secret ./` | `graudit -d secrets` | trivy-security-scan |
+| Terraform (.tf) | `trivy config ./` + `checkov --framework terraform` | `graudit -d secrets` | trivy-security-scan + checkov |
+| Kubernetes (manifests) | `trivy config ./` + `checkov --framework kubernetes` | `graudit -d secrets` | trivy-security-scan + checkov |
+| Kubernetes (cluster) | `trivy k8s cluster` | `checkov` (manifests) | trivy-security-scan |
+| Dockerfile | `trivy config ./Dockerfile` + `checkov --framework dockerfile` | `shellcheck` (RUN) | trivy-security-scan + checkov |
 | GitHub Actions (.yml) | `checkov -d .github/workflows --framework github_actions` | `shellcheck` (run steps) | checkov-security-scan |
-| CloudFormation | `checkov -d . --framework cloudformation` | `graudit -d secrets` | checkov-security-scan |
+| CloudFormation | `trivy config ./` + `checkov --framework cloudformation` | `graudit -d secrets` | trivy-security-scan + checkov |
 | Unknown/Untrusted | `graudit -d exec,secrets` | All others | graudit-security-scan |
 
 ### Cross-Reference with tools-audit.md
@@ -429,11 +436,16 @@ For each suspicious pattern found, evaluate:
 | Node.js | **ESLint** + `eslint-plugin-security` | `child_process.exec()`, unsafe patterns |
 | PowerShell | **PSScriptAnalyzer** | `Invoke-Expression`, `Set-ExecutionPolicy` |
 | Bash | **ShellCheck** | Unquoted variables, command injection risks |
-| Bash | **Graudit** | High-risk signatures like `/dev/tcp/` || Terraform | **Checkov** | Exposed secrets in IaC, insecure resource configs, public access |
-| Kubernetes | **Checkov** | Privileged containers, secrets in manifests, security policies |
-| Dockerfile | **Checkov** | Hardcoded secrets, insecure base images, exposed ports |
+| Bash | **Graudit** | High-risk signatures like `/dev/tcp/` |
+| Container Images | **Trivy** | CVEs in OS packages, language dependencies, container misconfigurations |
+| Filesystems | **Trivy** | Known vulnerabilities in dependencies, hardcoded secrets, license issues |
+| Terraform | **Trivy** + **Checkov** | IaC misconfigurations, exposed secrets, insecure resource configs, public access |
+| Kubernetes | **Trivy** + **Checkov** | Privileged containers, secrets in manifests, security policies, CVEs |
+| Dockerfile | **Trivy** + **Checkov** | Hardcoded secrets, insecure base images, exposed ports, misconfigurations |
 | GitHub Actions | **Checkov** | Secrets in workflows, unpinned actions, shell injection risks |
-| CloudFormation | **Checkov** | AWS misconfigurations, hardcoded credentials, public resources |
+| CloudFormation | **Trivy** + **Checkov** | AWS misconfigurations, hardcoded credentials, public resources |
+| Git Repositories | **Trivy** | CVEs in dependencies, secrets in commit history, IaC misconfigurations |
+| Kubernetes Clusters | **Trivy** | Live cluster vulnerabilities, misconfigurations, compliance violations |
 ---
 
 ## Analysis Framework
@@ -576,6 +588,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | dependency-check-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | checkov-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | eslint-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
+| trivy-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 
 ### Limitations (if Standalone Mode)
 [List any detection limitations due to missing tools]
@@ -638,6 +651,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | Dependency-Check | `.github/skills/dependency-check-security-scan/SKILL.md` |
 | Checkov | `.github/skills/checkov-security-scan/SKILL.md` |
 | ESLint | `.github/skills/eslint-security-scan/SKILL.md` |
+| Trivy | `.github/skills/trivy-security-scan/SKILL.md` |
 
 ### If Skills Are Missing:
 

@@ -48,6 +48,7 @@ Skills teach Copilot how to use specific security tools:
 | **guarddog-security-scan** | Supply chain & malware detection | Dependencies (`requirements.txt`, `package.json`), typosquatting, malicious packages |
 | **shellcheck-security-scan** | Shell script static analysis | Bash/sh scripts, command injection, unquoted variables |
 | **graudit-security-scan** | Multi-language pattern matching | Quick scans on unknown codebases, secrets detection, 15+ languages |
+| **trivy-security-scan** | Container, IaC, CVE & secret scanning | Container images, filesystem dependencies, Kubernetes clusters, IaC misconfigurations, hardcoded secrets, SBOM generation |
 
 ---
 
@@ -127,9 +128,12 @@ Runs comprehensive analysis using available tools and pattern detection.
 │   └── sechek.malicious-code-scanner.agent.md  # Security scanner agent
 ├── skills/
 │   ├── bandit-security-scan/                   # Python security
+│   ├── checkov-security-scan/                  # IaC security
+│   ├── eslint-security-scan/                   # JavaScript/TypeScript
 │   ├── guarddog-security-scan/                 # Supply chain
 │   ├── shellcheck-security-scan/               # Shell scripts
-│   └── graudit-security-scan/                  # Multi-language
+│   ├── graudit-security-scan/                  # Multi-language
+│   └── trivy-security-scan/                    # Container & cloud-native
 ├── prompts/                                    # Custom prompts
 └── .context/                                   # Attack patterns reference
 research/
