@@ -44,6 +44,7 @@ Skills teach Copilot how to use specific security tools:
 |-------|---------|---------|
 | **bandit-security-scan** | Python AST-based security analysis | Python code vulnerabilities, dangerous functions (eval, exec, pickle), SQL injection |
 | **checkov-security-scan** | Infrastructure as Code security analysis | Terraform, CloudFormation, Kubernetes manifests, Dockerfiles, cloud misconfigurations, IAM policies |
+| **dependency-check-security-scan** | Software Composition Analysis (SCA) for known CVEs | Java, .NET, JavaScript, Python, Ruby, Go dependencies, NVD/CISA KEV vulnerability detection, compliance scanning |
 | **eslint-security-scan** | JavaScript/TypeScript security analysis | JS/TS code vulnerabilities, code injection, XSS, command injection, ReDoS, prototype pollution |
 | **guarddog-security-scan** | Supply chain & malware detection | Dependencies (`requirements.txt`, `package.json`), typosquatting, malicious packages |
 | **shellcheck-security-scan** | Shell script static analysis | Bash/sh scripts, command injection, unquoted variables |
