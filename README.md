@@ -49,6 +49,7 @@ Skills teach Copilot how to use specific security tools:
 | **guarddog-security-scan** | Supply chain & malware detection | Dependencies (`requirements.txt`, `package.json`), typosquatting, malicious packages |
 | **shellcheck-security-scan** | Shell script static analysis | Bash/sh scripts, command injection, unquoted variables |
 | **graudit-security-scan** | Multi-language pattern matching | Quick scans on unknown codebases, secrets detection, 15+ languages |
+| **template-analyzer-security-scan** | Azure ARM/Bicep IaC security analysis | Azure ARM templates, Bicep files, HTTPS/TLS enforcement, missing encryption, RBAC misconfigurations, Azure-specific security rules |
 | **trivy-security-scan** | Container, IaC, CVE & secret scanning | Container images, filesystem dependencies, Kubernetes clusters, IaC misconfigurations, hardcoded secrets, SBOM generation |
 
 ---
@@ -62,7 +63,7 @@ Skills teach Copilot how to use specific security tools:
 | **`/sechek.security-scan`** | Full workspace scan with the security scanner agent |
 | **`/sechek.security-scan-quick`** | Fast scan for malicious patterns, exfiltration, reverse shells |
 | **`/sechek.security-scan-python`** | Python-focused scan using Bandit and GuardDog |
-| **`/sechek.security-scan-iac`** | Infrastructure as Code scan using Checkov for cloud misconfigurations |
+| **`/sechek.security-scan-iac`** | Infrastructure as Code scan using Checkov and Template Analyzer for Azure ARM/Bicep |
 | **`/sechek.security-scan-shell`** | Shell script scan using ShellCheck and Graudit |
 | **`/sechek.security-scan-supply-chain`** | Scan dependencies for supply chain attacks |
 | **`/sechek.security-scan-precommit`** | Pre-commit check for secrets and vulnerabilities |
@@ -130,10 +131,12 @@ Runs comprehensive analysis using available tools and pattern detection.
 ├── skills/
 │   ├── bandit-security-scan/                   # Python security
 │   ├── checkov-security-scan/                  # IaC security
+│   ├── dependency-check-security-scan/         # SCA for CVEs
 │   ├── eslint-security-scan/                   # JavaScript/TypeScript
 │   ├── guarddog-security-scan/                 # Supply chain
 │   ├── shellcheck-security-scan/               # Shell scripts
 │   ├── graudit-security-scan/                  # Multi-language
+│   ├── template-analyzer-security-scan/        # Azure ARM/Bicep IaC
 │   └── trivy-security-scan/                    # Container & cloud-native
 ├── prompts/                                    # Custom prompts
 └── .context/                                   # Attack patterns reference
