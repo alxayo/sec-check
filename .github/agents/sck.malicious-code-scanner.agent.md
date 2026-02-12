@@ -46,6 +46,7 @@ The `runTerminal` tool may ONLY be used for:
 - ✅ `checkov` - Infrastructure as Code security scanner
 - ✅ `eslint` - JavaScript/TypeScript security scanner
 - ✅ `trivy` - Container, IaC, and filesystem security scanner
+- ✅ `TemplateAnalyzer` - Azure ARM/Bicep IaC security scanner
 - ✅ `mkdir -p .github/.audit` - Creating output directories
 - ✅ `which`/`--version` commands - Checking tool availability
 - ✅ `grep`, `find`, `cat`, `head`, `tail` - Reading/searching files (NOT executing them)
@@ -90,6 +91,7 @@ When security skills are available in `.github/skills/`, leverage them for compr
 | **Checkov** | `.github/skills/checkov-security-scan/SKILL.md` | Infrastructure as Code (IaC) security & compliance |
 | **ESLint** | `.github/skills/eslint-security-scan/SKILL.md` | JavaScript/TypeScript security analysis |
 | **Trivy** | `.github/skills/trivy-security-scan/SKILL.md` | Container, IaC, filesystem CVE & secret scanning |
+| **Template Analyzer** | `.github/skills/template-analyzer-security-scan/SKILL.md` | Azure ARM/Bicep IaC security & best practices |
 
 **Workflow with skills:**
 1. Check if `.github/skills/` directory exists
@@ -135,6 +137,7 @@ dependency-check --version 2>/dev/null && echo "✅ Dependency-Check available" 
 checkov --version 2>/dev/null && echo "✅ Checkov available" || echo "⚠️ Checkov not installed"
 eslint --version 2>/dev/null && echo "✅ ESLint available" || echo "⚠️ ESLint not installed"
 trivy --version 2>/dev/null && echo "✅ Trivy available" || echo "⚠️ Trivy not installed"
+TemplateAnalyzer --version 2>/dev/null && echo "✅ Template Analyzer available" || echo "⚠️ Template Analyzer not installed"
 ```
 
 ### Step 3: Select Operating Mode
@@ -175,6 +178,8 @@ Based on the skills' decision matrices, execute in this order:
 | Filesystem (CVE scan) | `trivy fs --scanners vuln ./` | `dependency-check` | trivy-security-scan |
 | Secrets in filesystem | `trivy fs --scanners secret ./` | `graudit -d secrets` | trivy-security-scan |
 | Terraform (.tf) | `trivy config ./` + `checkov --framework terraform` | `graudit -d secrets` | trivy-security-scan + checkov |
+| Azure ARM (.json) | `TemplateAnalyzer analyze-template` + `checkov --framework arm` | `graudit -d secrets` | template-analyzer-security-scan |
+| Azure Bicep (.bicep) | `TemplateAnalyzer analyze-template` | `graudit -d secrets` | template-analyzer-security-scan |
 | Kubernetes (manifests) | `trivy config ./` + `checkov --framework kubernetes` | `graudit -d secrets` | trivy-security-scan + checkov |
 | Kubernetes (cluster) | `trivy k8s cluster` | `checkov` (manifests) | trivy-security-scan |
 | Dockerfile | `trivy config ./Dockerfile` + `checkov --framework dockerfile` | `shellcheck` (RUN) | trivy-security-scan + checkov |
@@ -440,6 +445,7 @@ For each suspicious pattern found, evaluate:
 | Container Images | **Trivy** | CVEs in OS packages, language dependencies, container misconfigurations |
 | Filesystems | **Trivy** | Known vulnerabilities in dependencies, hardcoded secrets, license issues |
 | Terraform | **Trivy** + **Checkov** | IaC misconfigurations, exposed secrets, insecure resource configs, public access |
+| Azure ARM/Bicep | **Template Analyzer** | HTTPS/TLS issues, missing encryption, CORS misconfig, disabled auditing, RBAC issues |
 | Kubernetes | **Trivy** + **Checkov** | Privileged containers, secrets in manifests, security policies, CVEs |
 | Dockerfile | **Trivy** + **Checkov** | Hardcoded secrets, insecure base images, exposed ports, misconfigurations |
 | GitHub Actions | **Checkov** | Secrets in workflows, unpinned actions, shell injection risks |
@@ -589,6 +595,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | checkov-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | eslint-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 | trivy-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
+| template-analyzer-security-scan | ✅ Found / ❌ Not Found | ✅ / ❌ |
 
 ### Limitations (if Standalone Mode)
 [List any detection limitations due to missing tools]
@@ -652,6 +659,7 @@ After completing your analysis, save all findings to `.github/.audit/scan-result
 | Checkov | `.github/skills/checkov-security-scan/SKILL.md` |
 | ESLint | `.github/skills/eslint-security-scan/SKILL.md` |
 | Trivy | `.github/skills/trivy-security-scan/SKILL.md` |
+| Template Analyzer | `.github/skills/template-analyzer-security-scan/SKILL.md` |
 
 ### If Skills Are Missing:
 

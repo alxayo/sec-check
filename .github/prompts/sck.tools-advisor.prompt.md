@@ -192,6 +192,29 @@ Review these skills from the `.github/skills/` folder:
 - **NOT for**: Dependency CVEs (use npm audit/Dependency-Check), non-JavaScript code, minified/heavily obfuscated code, malicious npm packages (use GuardDog)
 - **Key distinction**: ESLint scans **JavaScript/TypeScript source code** for vulnerabilities; GuardDog detects **malicious npm packages**; Dependency-Check finds **known CVEs**
 
+### 8. Template Analyzer Security Scan
+- **Skill**: `template-analyzer-security-scan`
+- **Skill file**: [.github/skills/template-analyzer-security-scan/SKILL.md](.github/skills/template-analyzer-security-scan/SKILL.md)
+- **Purpose**: Scan Azure ARM (Azure Resource Manager) and Bicep Infrastructure-as-Code templates for security misconfigurations and best practice violations
+- **Supported frameworks**: Azure ARM templates, Azure Bicep
+- **File types**: `.json` (ARM templates with Azure schema), `.bicep` files
+- **Detection capabilities**:
+  - HTTPS/TLS enforcement issues (FTPS not enforced, outdated TLS versions)
+  - Missing encryption (unencrypted automation variables, Redis non-SSL connections)
+  - Overly permissive CORS policies
+  - Disabled auditing and logging
+  - Missing managed identities and service principals
+  - RBAC misconfigurations and authentication bypass
+  - Insecure API settings and vulnerable resource configurations
+  - Classic (non-ARM) resource usage
+- **Rule severity levels**: High (1), Medium (2), Low (3) with ~30+ built-in rules
+- **Output formats**: Console, SARIF (for CI/CD integration)
+- **Integration**: Includes PSRule for Azure integration for Well-Architected Framework compliance
+- **MITRE ATT&CK mapped**: Yes (T1071, T1557, T1552, T1190, T1078, T1562)
+- **Best for**: Azure IaC security audits, pre-deployment validation of ARM/Bicep templates, Azure compliance checks, CI/CD security gates for Azure deployments
+- **NOT for**: Application source code (use Bandit/Graudit), non-Azure IaC like Terraform/CloudFormation/Kubernetes (use Checkov/Trivy), runtime Azure security (use Azure Security Center)
+- **Key distinction**: Template Analyzer is **Azure-specific** for ARM/Bicep templates; Checkov and Trivy cover **multi-cloud IaC** including Azure, AWS, GCP
+
 ---
 
 ## Quick Decision Flowchart
@@ -205,6 +228,8 @@ START: What's the primary concern?
 │   └─► YES → Graudit (exec+secrets) FIRST, then others
 │
 ├─► "Are there INFRASTRUCTURE AS CODE (IaC) files?"
+│   ├─► Azure ARM (.json) → Template Analyzer analyze-template (Azure-specific) + Checkov --framework arm
+│   ├─► Azure Bicep (.bicep) → Template Analyzer analyze-template (Azure-specific)
 │   ├─► Terraform (.tf) → Checkov --framework terraform + Trivy config
 │   ├─► Kubernetes manifests → Checkov --framework kubernetes + Trivy config
 │   ├─► CloudFormation (.yaml/.json) → Checkov --framework cloudformation + Trivy config
@@ -270,6 +295,8 @@ Use this matrix to determine optimal skill selection:
 | **Unknown/untrusted** | Graudit (exec, secrets) | All applicable tools | Quick triage |
 | **Mobile (Android/iOS)** | Graudit (android/ios) | Graudit (secrets) | Platform-specific |
 | **PHP** | Graudit (php) | Dependency-Check (experimental), Graudit (secrets, sql) | CVE + pattern matching |
+| **Azure ARM (.json)** | Template Analyzer (analyze-template) | Checkov (--framework arm), Graudit (secrets) | Azure-specific IaC security |
+| **Azure Bicep (.bicep)** | Template Analyzer (analyze-template) | Graudit (secrets) | Azure Bicep security |
 | **Terraform** | Checkov (--framework terraform) | Graudit (secrets) | IaC misconfiguration detection |
 | **CloudFormation** | Checkov (--framework cloudformation) | Graudit (secrets) | AWS IaC security |
 | **Kubernetes manifests** | Checkov (--framework kubernetes) | Graudit (secrets) | K8s security policies |
@@ -293,7 +320,8 @@ When multiple tools could apply, use these priority rules:
 1. **Untrusted code always wins**: If origin is unknown/suspicious → Start with Graudit (exec+secrets)
 2. **Containers first**: If container images exist → Trivy image scan FIRST for CVEs before deployment
 3. **IaC before application code**: If IaC files exist → Checkov + Trivy config to catch infrastructure misconfigurations
-4. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check/Trivy (CVEs) before scanning source
+4. **Azure IaC specificity**: If Azure ARM/Bicep templates → Template Analyzer FIRST (Azure-specific rules), then Checkov for cross-validation
+5. **Dependencies before source**: If dependency files exist → GuardDog verify (malware) AND/OR Dependency-Check/Trivy (CVEs) before scanning source
 5. **CVE detection vs Malware detection**: Use BOTH GuardDog (malware) + Dependency-Check/Trivy (CVEs) for comprehensive supply chain security
 6. **AST tools over regex**: For Python use Bandit over Graudit; for Shell use ShellCheck over Graudit; for IaC use Checkov+Trivy over Graudit
 7. **Graudit complements, not replaces**: Always add Graudit `secrets` as secondary scan
@@ -362,13 +390,14 @@ Search the target path for:
 - SBOM files (`.spdx.json`, `.cdx.json`, `sbom.json`) → Scan with Trivy sbom
 
 **Infrastructure as Code (IaC) Files**:
+- `.json` (with Azure schema: `$schema` containing `deploymentTemplate.json`) → Azure ARM templates
+- `.bicep` → Azure Bicep templates
 - `.tf`, `.tf.json` → Terraform configurations
 - `.yaml`, `.yml`, `.json`, `.template` (in cloud dirs) → CloudFormation templates
 - Kubernetes manifests (deployments, services, pods, etc.)
 - `Dockerfile`, `Dockerfile.*` → Container definitions
 - `Chart.yaml`, `values.yaml` (in Helm directories) → Helm charts
 - `kustomization.yaml` → Kustomize
-- `.bicep` → Azure Bicep templates
 - `serverless.yml` → Serverless Framework
 
 **CI/CD & Build Files**:
@@ -386,6 +415,7 @@ Search the target path for:
 Determine the risk areas:
 - **Container risk**: Container images or Docker projects? → Trivy image/fs scan FIRST for CVEs and secrets
 - **Infrastructure risk**: IaC files present? → Checkov + Trivy config for cloud misconfigurations
+- **Azure infrastructure risk**: ARM/Bicep templates present? → Template Analyzer (Azure-specific) + Checkov for validation
 - **Kubernetes risk**: K8s manifests or live cluster? → Trivy k8s + Checkov for security policies
 - **Supply chain risk**: Dependencies present? → GuardDog (malware) + Trivy fs/Dependency-Check (CVEs)
 - **Code vulnerabilities**: Custom code present? → Language-specific tools (ESLint for JS/TS, Bandit for Python, etc.)
@@ -548,6 +578,18 @@ When recommending skills, include these optimized commands:
 - Scan SBOM: `trivy sbom ./sbom.spdx.json`
 - Dockerfile only: `trivy config ./Dockerfile`
 
+### Template Analyzer
+- Scan single ARM template: `TemplateAnalyzer analyze-template ./azuredeploy.json`
+- Scan with parameters: `TemplateAnalyzer analyze-template ./azuredeploy.json -p ./parameters.json`
+- Scan Bicep template: `TemplateAnalyzer analyze-template ./main.bicep`
+- Scan directory (recursive): `TemplateAnalyzer analyze-directory ./infrastructure/`
+- SARIF output for CI/CD: `TemplateAnalyzer analyze-template ./template.json --report-format Sarif -o results.sarif`
+- Verbose output (all rules): `TemplateAnalyzer analyze-template ./template.json -v`
+- Include non-security rules: `TemplateAnalyzer analyze-template ./template.json --include-non-security-rules`
+- Custom rules file: `TemplateAnalyzer analyze-template ./template.json --custom-json-rules-path ./custom-rules.json`
+- CI/CD gate (exit code 20 = violations): `TemplateAnalyzer analyze-directory ./templates/ --report-format Sarif -o scan.sarif`
+- Quick pre-deployment check: `TemplateAnalyzer analyze-template ./azuredeploy.json -p ./params.json && echo "Safe to deploy" || echo "Security violations found"`
+
 ---
 
 ## Next Steps
@@ -595,6 +637,9 @@ To execute these recommended scans:
 | Use Trivy alone for malware detection | Trivy detects CVEs—add GuardDog for malicious packages |
 | Skip Trivy k8s for Kubernetes cluster audits | Trivy k8s scans live clusters—complement with Checkov for manifests |
 | Ignore compliance requirements | Use Trivy/Dependency-Check with severity filters + Checkov for IaC compliance |
+| Skip Template Analyzer for Azure ARM/Bicep | Template Analyzer has Azure-specific rules deeper than Checkov |
+| Use Template Analyzer for Terraform/CloudFormation | Template Analyzer is Azure-only—use Checkov/Trivy for other clouds |
+| Use only Checkov for Azure IaC | Template Analyzer provides Azure-specific depth—use both for comprehensive coverage |
 
 ---
 
@@ -612,6 +657,7 @@ When making recommendations, account for these limitations:
 | **Checkov** | Runtime misconfigurations, logic flaws in application code, dynamic/computed values, actual deployed state vs declared config, secrets in encrypted/base64 beyond patterns | Static analysis only - validate with cloud security posture tools, combine with Graudit for secrets, cannot scan application source code |
 | **ESLint** | Runtime vulnerabilities, sophisticated obfuscation, dependency CVEs, minified code, behavioral analysis, malicious npm packages | Static pattern-based only - add npm audit/Dependency-Check for CVEs, GuardDog for malware, manual review for obfuscated code |
 | **Trivy** | Python source code logic vulnerabilities, malicious package behavior, sophisticated obfuscation, runtime-only issues, zero-day CVEs not in databases | Static CVE/misconfig scanner only - use Bandit for Python code, GuardDog for malware, cannot detect application logic flaws |
+| **Template Analyzer** | Non-Azure IaC (Terraform/K8s/CloudFormation), runtime Azure security, logic flaws in application code, dynamic/computed parameter values, secrets detection beyond patterns | Azure ARM/Bicep only - use Checkov/Trivy for multi-cloud, Azure Security Center for runtime, Graudit for secrets, integrates with PSRule for extended rules |
 
 ### Combined Blind Spots
 All tools are static analysis only - they cannot detect:
