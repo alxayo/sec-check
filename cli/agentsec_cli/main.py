@@ -16,6 +16,7 @@ Usage:
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -26,13 +27,37 @@ from typing import Optional
 # Instead, we import it lazily inside run_scan() so that --version and
 # --help still work even when the SDK is missing.
 
-# Configure logging for the CLI
-# We use INFO level so users see important messages but not debug noise
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",  # Simple format for CLI output
-)
+# Default logging is configured in main() based on --verbose flag.
+# We just create the logger here.
 logger = logging.getLogger(__name__)
+
+
+def configure_logging(verbose: bool = False) -> None:
+    """
+    Configure logging for the CLI.
+
+    In normal mode, only INFO messages are shown with a simple format.
+    In verbose mode, DEBUG messages are shown with timestamps and module names,
+    which is essential for troubleshooting SDK and event issues.
+
+    Args:
+        verbose: If True, enable DEBUG logging with detailed format
+    """
+    if verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+        # Also enable debug for the copilot SDK and agent_framework
+        logging.getLogger("copilot").setLevel(logging.DEBUG)
+        logging.getLogger("agent_framework").setLevel(logging.DEBUG)
+        logging.getLogger("agentsec").setLevel(logging.DEBUG)
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(message)s",
+        )
 
 
 def create_progress_display():
@@ -164,6 +189,125 @@ def create_progress_bar(percent: float, width: int = 20) -> str:
     return f"[{bar}] {percent:3.0f}%"
 
 
+def print_available_skills() -> None:
+    """
+    Print the available scanning skills and external tools.
+
+    This shows the user which built-in skills the agent has registered
+    and which external security tools are available on the system.
+    External tools (like bandit, graudit) provide deeper analysis
+    when the agent invokes them via the bash tool.
+    """
+    import shutil
+
+    print("\n📋 Available scanning skills:")
+    print("  Built-in skills:")
+    print("    • list_files       — Discover files in target directory")
+    print("    • analyze_file     — Analyze a file for security vulnerabilities")
+    print("    • generate_report  — Generate a formatted vulnerability report")
+    print("  External security tools (auto-detected):")
+
+    # List of external tools the agent may use, with descriptions
+    external_tools = [
+        ("bandit", "Python AST security scanner (eval, exec, secrets)"),
+        ("graudit", "Pattern-based multi-language scanner (secrets, exec, SQL, XSS)"),
+        ("semgrep", "Semantic code analysis for security patterns"),
+        ("trivy", "Container and filesystem vulnerability scanner"),
+        ("shellcheck", "Shell script security analyzer"),
+    ]
+
+    for tool_name, description in external_tools:
+        if shutil.which(tool_name):
+            print(f"    ✅ {tool_name:<14} — {description}")
+        else:
+            print(f"    ⬜ {tool_name:<14} — {description} (not installed)")
+
+    print()
+
+
+def save_report(report_content: str, folder_path: Path) -> Optional[str]:
+    """
+    Save the scan report to a Markdown file in the current directory.
+
+    The report is saved with a timestamped filename like:
+    agentsec-report-20260213-143025.md
+
+    Args:
+        report_content: The full text of the scan report from the agent
+        folder_path: The folder that was scanned (included in the header)
+
+    Returns:
+        The absolute path to the saved report file, or None if saving failed
+    """
+    import datetime
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    report_filename = f"agentsec-report-{timestamp}.md"
+    report_path = Path.cwd() / report_filename
+
+    try:
+        with open(report_path, "w", encoding="utf-8") as report_file:
+            # Write a header with metadata
+            report_file.write("# AgentSec Security Report\n\n")
+            report_file.write(f"**Scanned folder:** `{folder_path}`\n")
+            report_file.write(
+                f"**Date:** "
+                f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            )
+            report_file.write("---\n\n")
+            # Write the actual report content from the agent
+            report_file.write(report_content)
+            report_file.write("\n")
+
+        return str(report_path)
+
+    except Exception as error:
+        logger.warning(f"Could not save report to file: {error}")
+        return None
+
+
+def _parse_result_counts(result_text: str) -> dict:
+    """
+    Try to parse file and issue counts from the agent's response.
+
+    The agent's response typically includes phrases like "5 security issues"
+    and file names in bold like **vulnerable_app.py**. This function uses
+    simple regex patterns to extract those numbers so the progress tracker's
+    final summary line shows accurate counts.
+
+    Args:
+        result_text: The text content of the agent's scan result
+
+    Returns:
+        A dictionary with optional keys "files" and "issues".
+        Empty dict if no counts could be parsed.
+    """
+    import re
+
+    counts = {}
+
+    # Try to find issue count: "5 security issues", "3 issues", "5 findings"
+    issue_match = re.search(
+        r'\*?\*?(\d+)\*?\*?\s+(?:security\s+)?(?:issues?|findings?|vulnerabilit)',
+        result_text,
+        re.IGNORECASE,
+    )
+    if issue_match:
+        counts["issues"] = int(issue_match.group(1))
+
+    # Try to find scanned file names by looking for bold file names
+    # like **vulnerable_app.py** and **utils.py** in the response
+    file_mentions = re.findall(
+        r'\*\*(\w+\.(?:py|js|ts|jsx|tsx|java|go|rb|rs|c|cpp|h))\*\*',
+        result_text,
+    )
+    if file_mentions:
+        # Count unique file names mentioned in bold
+        counts["files"] = len(set(file_mentions))
+
+    return counts
+
+
 async def run_scan(
     folder: str,
     config_path: Optional[str] = None,
@@ -255,14 +399,35 @@ async def run_scan(
         print("Starting AgentSec security scanner...")
         await agent.initialize()
 
+        # Step 6b: Show available scanning skills and external tools
+        print_available_skills()
+
         # Step 7: Run the scan with progress tracking
         progress_tracker.start_scan(str(folder_path))
         result = await agent.scan(str(folder_path))
+
+        # Step 7b: Update progress tracker with actual counts from
+        # the agent's response, so the final summary line shows
+        # accurate numbers instead of approximate tool-based counts
+        if result["status"] == "success" and result.get("result"):
+            actual_counts = _parse_result_counts(result["result"])
+            if actual_counts:
+                progress_tracker.update_counts(
+                    files_scanned=actual_counts.get("files"),
+                    issues_found=actual_counts.get("issues"),
+                )
+
         progress_tracker.finish_scan()
 
         # Step 8: Display results based on status
         if result["status"] == "success":
             print(result["result"])
+
+            # Save the report to a file and show its location
+            report_path = save_report(result["result"], folder_path)
+            if report_path:
+                print(f"📄 Report saved to: {report_path}")
+
             return 0
 
         elif result["status"] == "timeout":
@@ -292,6 +457,9 @@ async def run_scan(
         # Step 9: Always clean up resources
         set_global_tracker(None)  # Clear the global tracker
         await agent.cleanup()
+        
+        # Give a small delay to allow any background threads to finish
+        await asyncio.sleep(0.5)
 
 
 def main() -> None:
@@ -355,6 +523,17 @@ def main() -> None:
         help="Path to the folder to scan (e.g., ./src or C:\\code\\myapp)",
     )
     
+    # Verbose / debug logging option
+    scan_parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable verbose/debug logging. Shows all SDK events, "
+            "tool calls, and internal state for troubleshooting."
+        ),
+    )
+    
     # Configuration file option
     scan_parser.add_argument(
         "--config", "-c",
@@ -413,6 +592,9 @@ def main() -> None:
 
     # Route to the correct command
     if args.command == "scan":
+        # Configure logging based on --verbose flag
+        configure_logging(verbose=args.verbose)
+
         exit_code = asyncio.run(
             run_scan(
                 folder=args.folder,
@@ -423,7 +605,10 @@ def main() -> None:
                 prompt_file=args.prompt_file,
             )
         )
-        sys.exit(exit_code)
+
+        # Force exit the process to avoid hanging on background threads
+        # from the Copilot SDK subprocess or heartbeat timer
+        os._exit(exit_code)
     else:
         # No command given — show help
         parser.print_help()

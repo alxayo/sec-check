@@ -215,6 +215,15 @@ class ProgressTracker:
                         f"{self._issues_found} issues found ({minutes}m {seconds}s elapsed)"
                     )
 
+                # Calculate percent directly here instead of calling
+                # self._get_percent(), because _get_percent() also acquires
+                # self._lock — and threading.Lock is NOT reentrant, so calling
+                # it from inside a lock context would deadlock.
+                if self._total_files > 0:
+                    percent = (self._files_scanned / self._total_files) * 100.0
+                else:
+                    percent = -1.0
+
                 event = ProgressEvent(
                     type=ProgressEventType.HEARTBEAT,
                     message=message,
@@ -223,7 +232,7 @@ class ProgressTracker:
                     total_files=self._total_files,
                     issues_found=self._issues_found,
                     elapsed_seconds=elapsed,
-                    percent_complete=self._get_percent(),
+                    percent_complete=percent,
                 )
 
             self._emit(event)
@@ -282,6 +291,29 @@ class ProgressTracker:
             total_files=total,
             elapsed_seconds=self._get_elapsed(),
         ))
+
+    def update_counts(
+        self,
+        files_scanned: Optional[int] = None,
+        issues_found: Optional[int] = None,
+    ) -> None:
+        """
+        Update the scan counters with corrected values.
+
+        This is useful when the actual file and issue counts are determined
+        after the scan completes (for example, by parsing the agent's final
+        response). It allows the final progress summary to show accurate
+        numbers instead of approximate tool-based counts.
+
+        Args:
+            files_scanned: If provided, overrides the files_scanned counter
+            issues_found: If provided, overrides the issues_found counter
+        """
+        with self._lock:
+            if files_scanned is not None:
+                self._files_scanned = files_scanned
+            if issues_found is not None:
+                self._issues_found = issues_found
 
     def start_file(self, file_path: str) -> None:
         """
@@ -414,7 +446,8 @@ class ProgressTracker:
         # Stop heartbeat thread
         if self._heartbeat_thread:
             self._stop_heartbeat.set()
-            self._heartbeat_thread.join(timeout=1.0)
+            # Wait longer for thread to stop to avoid orphaned threads
+            self._heartbeat_thread.join(timeout=3.0)
             self._heartbeat_thread = None
 
         with self._lock:
@@ -451,6 +484,14 @@ class ProgressTracker:
             Dictionary with scan statistics
         """
         with self._lock:
+            # Calculate percent directly here instead of calling
+            # self._get_percent(), because we already hold self._lock
+            # and threading.Lock is NOT reentrant (would deadlock).
+            if self._total_files > 0:
+                percent = (self._files_scanned / self._total_files) * 100.0
+            else:
+                percent = -1.0
+
             return {
                 "scan_active": self._scan_active,
                 "folder_path": self._folder_path,
@@ -459,7 +500,7 @@ class ProgressTracker:
                 "total_files": self._total_files,
                 "issues_found": self._issues_found,
                 "elapsed_seconds": self._get_elapsed(),
-                "percent_complete": self._get_percent(),
+                "percent_complete": percent,
             }
 
 
