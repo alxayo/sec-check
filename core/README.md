@@ -10,12 +10,41 @@ pip install -e ./core
 
 ## Package Structure
 
-- `agentsec/agent.py` — `SecurityScannerAgent` class (main entry point)
-- `agentsec/config.py` — `AgentSecConfig` class for configuration management
+- `agentsec/agent.py` — `SecurityScannerAgent` class (main entry point, stall detection, nudge system)
+- `agentsec/config.py` — `AgentSecConfig` class with directive system message and safety guardrails
 - `agentsec/progress.py` — `ProgressTracker` class for real-time scan feedback
 - `agentsec/skill_discovery.py` — Dynamic discovery of Copilot CLI agentic skills and tool availability checking
 - `agentsec/skills.py` — `@tool` skill functions (list_files, analyze_file, generate_report)
 - `tests/` — Unit and integration tests
+
+## How Scanning Works
+
+The agent uses **Copilot CLI built-in tools** as its primary scanning mechanism:
+
+| Tool | Purpose |
+|------|---------|
+| `bash` | File discovery (`find`, `ls`) and direct invocation of security scanner CLIs (bandit, graudit, etc.) |
+| `skill` | Invokes pre-configured Copilot CLI agentic skills (bandit-security-scan, graudit-security-scan, etc.) |
+| `view` | Reads file contents for manual LLM code inspection |
+
+A **directive system message** in `config.py` guides the LLM through a structured scanning workflow with comprehensive safety guardrails.
+
+### Stall Detection & Nudge System
+
+The `scan()` method monitors tool activity and prevents the LLM from getting stuck:
+
+| Constant | Default | Purpose |
+|----------|---------|---------|
+| `DEFAULT_SCAN_TIMEOUT_SECONDS` | 300s | Maximum wall-clock time for a scan |
+| `STALL_DETECTION_SECONDS` | 30s | Inactivity threshold before sending a nudge |
+| `SCANNING_TOOL_NAMES` | `{"skill"}` | Tool names that count as security scanning activity |
+| `MAX_NUDGES` | 2 | Maximum nudge messages per scan |
+
+If no tool activity occurs for 30 seconds, a nudge message is sent. Two types of nudges:
+1. **Redirect nudge** — if the LLM hasn't invoked any security scanners yet
+2. **Progress nudge** — if the LLM ran scanners but seems stuck
+
+Partial results are captured and returned on timeout instead of discarding all work.
 
 ## Configuration
 

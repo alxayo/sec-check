@@ -70,11 +70,18 @@ agentsec scan ./test-scan
 
 **Expected behavior:**
 1. The CLI will connect to Copilot CLI
-2. The agent will analyze files in `test-scan/`
-3. You'll see a report with security issues found:
-   - HIGH: `eval()` call in `vulnerable_app.py`
-   - MEDIUM: Hardcoded credentials (`api_key`, `password`)
-   - LOW: Dangerous imports (`subprocess`, `os`)
+2. The agent will discover files in `test-scan/` using bash commands
+3. The agent will invoke security scanners (bandit, graudit, etc.) via the `skill` tool and/or bash
+4. The agent will inspect suspicious files using the `view` tool
+5. You'll see a structured security report with findings including:
+   - Severity levels (CRITICAL / HIGH / MEDIUM / LOW)
+   - Per-file findings with line numbers and code snippets
+   - Remediation recommendations
+
+**Reliability features active during scan:**
+- Stall detection monitors tool activity every 5 seconds
+- If the LLM stalls for 30+ seconds, a nudge message redirects it
+- Default 300-second timeout with partial results on timeout
 
 ### Step 4: Scan Your Own Code
 
@@ -99,19 +106,30 @@ agentsec scan ./core/agentsec
 AgentSec/
 ├── core/                      # Shared agent library
 │   ├── agentsec/
-│   │   ├── agent.py          # SecurityScannerAgent class
+│   │   ├── agent.py          # SecurityScannerAgent class (stall detection, nudge system)
+│   │   ├── config.py         # AgentSecConfig + directive system message
+│   │   ├── progress.py       # ProgressTracker for real-time scan feedback
+│   │   ├── skill_discovery.py # Dynamic Copilot CLI skill discovery
 │   │   └── skills.py         # Security scanning skills (@tool functions)
+│   ├── tests/
+│   │   ├── test_progress.py  # Progress tracking unit tests
+│   │   └── test_skills.py    # Skill function unit tests
 │   └── pyproject.toml
 │
 ├── cli/                       # Command-line interface
 │   ├── agentsec_cli/
-│   │   └── main.py           # CLI entry point
+│   │   └── main.py           # CLI entry point (config options, progress display)
 │   └── pyproject.toml
+│
+├── spec/                      # Design documents
+│   ├── plan-agentSec.md      # Architecture & specification
+│   └── implementation-plan.md # Detailed task-by-task implementation plan
 │
 ├── test-scan/                 # Test files with vulnerabilities
 │   ├── vulnerable_app.py     # Intentionally vulnerable code
 │   └── utils.py              # Safe utility functions
 │
+├── agentsec.example.yaml      # Example configuration file
 ├── venv/                      # Virtual environment (Linux/WSL)
 └── SETUP.md                   # This file
 ```

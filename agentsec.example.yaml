@@ -25,38 +25,22 @@
 #   2. Point to an external file (system_message_file)
 #
 # If both are provided, 'system_message' takes priority.
+#
+# The BUILT-IN DEFAULT system message (used when no config is specified):
+#   - Identifies the agent as "AgentSec, the Malicious Code Scanner"
+#   - Lists all available Copilot CLI tools (bash, skill, view)
+#   - Provides a structured scanning workflow
+#   - Includes comprehensive safety guardrails
+#   - Defends against prompt injection from analyzed code
+#
+# You can override it here to customize the agent's behavior.
+# For example, to focus on a specific language or vulnerability type:
 
-system_message: |
-  You are AgentSec, an AI-powered security scanning agent.
-
-  Your ONLY job is to call the three tools described below in order.
-  Do NOT use bash, shell commands, cat, cd, or any other CLI tools.
-  Do NOT try to install or run external programs like bandit, semgrep, or trivy.
-  Do NOT read files with the view tool — use analyze_file instead.
-  Do NOT write your own analysis — the tools do all the work for you.
-
-  You have EXACTLY three tools available. Use them in this exact order:
-
-  ## Tool 1: list_files
-  - Call: list_files(folder_path="<the folder to scan>")
-  - This returns a JSON object with a "files" list and a "total" count.
-  - You MUST call this first to discover all files.
-
-  ## Tool 2: analyze_file
-  - Call: analyze_file(file_path="<path to a single file>")
-  - This returns a JSON object with "file", "issues" list, "severity", and "lines_scanned".
-  - You MUST call this once for EVERY file returned by list_files.
-
-  ## Tool 3: generate_report
-  - Call: generate_report(findings=[<list of all analyze_file results>])
-  - Pass ALL analyze_file results as the "findings" argument.
-  - This returns a formatted security report.
-
-  CRITICAL RULES:
-  - NEVER use bash or shell commands.
-  - NEVER use the view tool to read files.
-  - NEVER skip any of the three steps above.
-  - After generate_report returns, include its summary in your response and STOP.
+# system_message: |
+#   You are a security expert specializing in Python web applications.
+#   Use the skill tool to invoke bandit-security-scan and graudit-security-scan.
+#   Focus on SQL injection, XSS, and authentication vulnerabilities.
+#   Generate a Markdown report with severity levels and remediation advice.
 
 # Or use an external file:
 # system_message_file: ./prompts/system-message.txt
@@ -72,18 +56,20 @@ system_message: |
 #   2. Point to an external file (initial_prompt_file)
 #
 # If both are provided, 'initial_prompt' takes priority.
+#
+# The BUILT-IN DEFAULT prompt instructs the agent to:
+#   1. Use bash to discover files
+#   2. Use the skill tool to run security scanners
+#   3. Use view for manual inspection
+#   4. Compile a structured Markdown report
+#
+# Override it here for customized scanning behavior:
 
-initial_prompt: |
-  Scan the folder {folder_path} for security vulnerabilities.
-
-  Follow these exact steps — do NOT deviate:
-  Step 1: Call list_files with folder_path="{folder_path}" to discover all files.
-  Step 2: For EVERY file in the list, call analyze_file with the file's full path.
-  Step 3: Collect ALL analyze_file results into a list and pass it to generate_report.
-  Step 4: Show the report summary and stop.
-
-  Do NOT use bash, shell, view, or any other tool. Only use list_files, analyze_file, and generate_report.
-  Start now by calling list_files.
+# initial_prompt: |
+#   Scan {folder_path} for security vulnerabilities.
+#   Focus on HIGH and CRITICAL severity only.
+#   Use bandit-security-scan and graudit-security-scan skills.
+#   Generate a brief summary report.
 
 # Or use an external file:
 # initial_prompt_file: ./prompts/scan-prompt.txt
@@ -98,10 +84,11 @@ initial_prompt: |
 # initial_prompt_file: ./prompts/scan.txt
 #
 #
-# Example 2: Custom security focus
-# --------------------------------
+# Example 2: Custom security focus (Python web apps)
+# ---------------------------------------------------
 # system_message: |
 #   You are a security expert specializing in Python web applications.
+#   Use the skill tool to invoke bandit-security-scan and graudit-security-scan.
 #   Focus especially on:
 #   - SQL injection vulnerabilities
 #   - Cross-site scripting (XSS)
@@ -109,8 +96,20 @@ initial_prompt: |
 #   - Sensitive data exposure
 #
 #
-# Example 3: Brief scanning mode
-# ------------------------------
+# Example 3: Brief scanning mode (HIGH severity only)
+# ----------------------------------------------------
 # initial_prompt: |
-#   Quick security check of {folder_path}. 
-#   Only report HIGH severity issues.
+#   Quick security check of {folder_path}.
+#   Only report HIGH and CRITICAL severity issues.
+#   Use bandit-security-scan skill, then generate a brief summary.
+#
+#
+# Example 4: Multi-language scanning
+# -----------------------------------
+# initial_prompt: |
+#   Scan {folder_path} for security issues across all file types.
+#   For Python files: use bandit-security-scan
+#   For JS/TS files: use eslint-security-scan
+#   For shell scripts: use shellcheck-security-scan
+#   For all files: use graudit-security-scan with secrets database
+#   Compile all findings into one report.

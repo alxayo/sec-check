@@ -62,11 +62,15 @@ pip install -e ./desktop/backend  # FastAPI server
 # - SecurityScannerAgent class
 # - Uses CopilotClient from SDK
 # - Manages session lifecycle (start/initialize/cleanup)
+# - Stall detection monitors tool activity; sends nudge messages if LLM stalls
+# - Configurable timeout (default 300s) with partial results on timeout
+# - Uses Copilot CLI built-in tools (bash, skill, view) for scanning
 
 # Define skills in core/agentsec/skills.py
 # - Use @tool decorator from agent_framework
 # - Async functions only
 # - Return dict with status, results, errors
+# - Skills are fallback tools; primary scanning uses Copilot CLI tools
 
 # Test agent invocation
 python -c "
@@ -461,8 +465,8 @@ All Python code uses `.vscode/python-copilot-sdk.instructions.md` for detailed a
 | `.vscode/python-copilot-sdk.instructions.md` | Python patterns + AgentSec best practices |
 | `spec/plan-agentSec.md` | Architecture & implementation roadmap |
 | `agentsec.example.yaml` | Example configuration file with documentation |
-| `core/agentsec/agent.py` | SecurityScannerAgent entry point |
-| `core/agentsec/config.py` | AgentSecConfig for customizable prompts |
+| `core/agentsec/agent.py` | SecurityScannerAgent entry point (stall detection, nudge system) |
+| `core/agentsec/config.py` | AgentSecConfig + directive system message + safety guardrails |
 | `core/agentsec/progress.py` | ProgressTracker for real-time scan feedback |
 | `core/agentsec/skills.py` | @tool skill definitions |
 | `cli/agentsec_cli/main.py` | CLI command routing with config options |
@@ -493,8 +497,14 @@ Always:
 **Q: Where does the agent get defined?**  
 A: `core/agentsec/agent.py` → `SecurityScannerAgent` class
 
+**Q: How does the agent scan code?**  
+A: Uses Copilot CLI built-in tools (`bash`, `skill`, `view`) — `bash` for file discovery and direct scanner invocation, `skill` for Copilot CLI agentic skills, `view` for file inspection. A directive system message guides the LLM through a structured scanning workflow.
+
 **Q: How do I customize the agent's behavior?**  
 A: Use `AgentSecConfig` from `core/agentsec/config.py` to set custom system message or prompt
+
+**Q: What happens if the agent gets stuck?**  
+A: Stall detection monitors tool activity every 5s. If no tool activity for 30s, a nudge message is sent (max 2 per scan). After 300s total timeout, partial results are returned.
 
 **Q: How do I configure the agent via command line?**  
 A: Use CLI options: `--config`, `--system-message`, `--system-message-file`, `--prompt`, `--prompt-file`

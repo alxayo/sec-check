@@ -630,6 +630,21 @@ assert report["high_count"] == 1
 - Implemented `SecurityScannerAgent` class with `initialize()`, `scan()`, and `cleanup()` methods
 - Agent accepts optional `AgentSecConfig` parameter for customization
 - Uses system_message and initial_prompt from configuration
+- Agent uses **Copilot CLI built-in tools** (`bash`, `skill`, `view`) as its primary scanning mechanism
+- `scan()` accepts optional `timeout` parameter (defaults to `DEFAULT_SCAN_TIMEOUT_SECONDS = 300.0`)
+- **Stall detection**: Polls every 5 seconds; if no tool activity for 30 seconds (`STALL_DETECTION_SECONDS`), sends a nudge message to redirect the LLM
+- **Nudge system**: Two types of nudges — redirect (if no security scanners invoked) and progress (if stuck after scanning); max 2 nudges per scan (`MAX_NUDGES`)
+- **Tool activity tracking**: Monitors `TOOL_EXECUTION_START` and `TOOL_EXECUTION_COMPLETE` events; tracks whether the `skill` tool or known scanner commands (bandit, graudit, etc.) have been invoked via `SCANNING_TOOL_NAMES`
+- **Partial results on timeout**: If the scan times out but an assistant message was captured, returns `status: "timeout"` with the partial result instead of just an error
+- **Progress tracker integration**: Tracks file reads via the `view` tool and updates the global `ProgressTracker`
+
+**Key constants** (defined at module level in `agent.py`):
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `DEFAULT_SCAN_TIMEOUT_SECONDS` | `300.0` | Maximum wall-clock time for a scan |
+| `STALL_DETECTION_SECONDS` | `30.0` | Inactivity threshold before sending a nudge |
+| `SCANNING_TOOL_NAMES` | `{"skill"}` | Tool names that count as security scanning activity |
+| `MAX_NUDGES` | `2` | Maximum nudge messages per scan |
 
 ---
 
@@ -644,28 +659,46 @@ assert report["high_count"] == 1
 1. Created `core/agentsec/config.py` with `AgentSecConfig` dataclass:
    - `system_message`: The AI's system prompt (who it is, what it does)
    - `initial_prompt`: The prompt template for scans (use `{folder_path}` placeholder)
+   - `system_message_source` / `initial_prompt_source`: Track where each value originated (built-in, config file, CLI flag)
    - `load()`: Load configuration from YAML file or defaults
    - `with_overrides()`: Apply CLI overrides to existing config
    - `format_prompt()`: Replace `{folder_path}` placeholder
 
-2. Configuration sources (in priority order):
+2. **Default system message** (`DEFAULT_SYSTEM_MESSAGE`) is a highly directive prompt that:
+   - Identifies the agent as "AgentSec, an AI-powered security scanning agent" and "Malicious Code Scanner"
+   - Lists all three available Copilot CLI tools (`bash`, `skill`, `view`) with usage instructions
+   - Provides a structured scanning workflow (discover files → run scanners → manual inspection → generate report)
+   - Includes comprehensive safety guardrails preventing execution of scanned code
+   - Defends against prompt injection from analyzed code comments
+   - Lists all available security scanner skills (bandit, graudit, guarddog, shellcheck, trivy, checkov, eslint, dependency-check)
+
+3. **Default initial prompt** (`DEFAULT_INITIAL_PROMPT`) provides step-by-step instructions for the scan:
+   - Use bash to discover files
+   - Use skill tool to run security scanners
+   - Use view for manual inspection
+   - Compile findings into a structured Markdown report
+
+4. Configuration sources (in priority order):
    - CLI arguments (highest priority)
    - YAML config file (`agentsec.yaml`)
    - Built-in defaults (lowest priority)
 
-3. Config file search paths:
+5. Config file search paths:
    - Current directory: `agentsec.yaml`, `agentsec.yml`, `.agentsec.yaml`, `.agentsec.yml`
    - User home directory
    - `~/.config/agentsec/`
 
-4. External file support:
+6. External file support:
    - `system_message_file`: Path to file containing system message
    - `initial_prompt_file`: Path to file containing initial prompt
 
-5. Updated dependencies:
+7. Source tracking constants:
+   - `SOURCE_BUILTIN`, `SOURCE_CONFIG_FILE`, `SOURCE_CONFIG_FILE_REF`, `SOURCE_CLI_FLAG`, `SOURCE_CLI_FILE_FLAG`
+
+8. Updated dependencies:
    - Added `pyyaml>=6.0` to `core/pyproject.toml`
 
-6. Created example config file:
+9. Created example config file:
    - `agentsec.example.yaml` with documentation and examples
 
 **Verification**:
@@ -2922,8 +2955,8 @@ The **critical path** — the longest chain of sequential dependencies that dete
 | 1 | 1.4 | `list_files` skill | 1.3 | Sequential | ✅ |
 | 1 | 1.5 | `analyze_file` skill | 1.4 | P with 1.6 | ✅ |
 | 1 | 1.6 | `generate_report` skill | 1.4 | P with 1.5 | ✅ |
-| 1 | 1.7 | `SecurityScannerAgent` class | 1.5, 1.6 | Sequential | ✅ |
-| 1 | 1.7b | `AgentSecConfig` configuration system | 1.7 | Sequential | ✅ |
+| 1 | 1.7 | `SecurityScannerAgent` class + stall detection + nudge system | 1.5, 1.6 | Sequential | ✅ |
+| 1 | 1.7b | `AgentSecConfig` + directive system message + safety guardrails | 1.7 | Sequential | ✅ |
 | 1 | 1.8 | Unit tests for skills | 1.7b | Sequential | |
 | 2 | 2.1 | CLI package scaffolding | 1.7b | Sequential | ✅ |
 | 2 | 2.2 | CLI main.py with config support | 2.1 | Sequential | ✅ |

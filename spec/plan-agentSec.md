@@ -25,16 +25,24 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 
 **2. Agent implementation with skills** (*parallel with step 1*)
 - Define security scanner agent in `core/agentsec/agent.py` with system instructions
-- Implement 2-3 prototype skills in `core/agentsec/skills.py` using `@tool` decorator:
+- Implement built-in skills in `core/agentsec/skills.py` using `@tool` decorator:
   - `list_files(folder_path: str)`: Enumerate files in target directory
-  - `analyze_file(file_path: str)`: Simple placeholder returning mock security findings
+  - `analyze_file(file_path: str)`: Analyze a file for security vulnerabilities
   - `generate_report(findings: list)`: Format scan results
-- Configure agent with tool approval mode for safety
+- Agent uses **Copilot CLI built-in tools** (bash, skill, view) as its primary scanning mechanism:
+  - `bash`: Runs file discovery commands and security scanner CLIs (bandit, graudit, etc.)
+  - `skill`: Invokes Copilot CLI agentic skills (bandit-security-scan, graudit-security-scan, etc.)
+  - `view`: Reads file contents for manual code inspection
+- Directive system message explicitly lists available tools and workflows with safety guardrails
+- Stall detection system monitors tool activity and sends nudge messages if the LLM gets stuck
+- Configurable scan timeout (default 300s) with partial results returned on timeout
 
 **3. Verification** (*depends on 1, 2*)
 - Install dependencies in virtual environment
 - Create minimal test script to invoke agent with skills
-- Verify agent can call tools and return responses
+- Verify agent calls Copilot CLI tools (bash, skill, view) to scan code
+- Verify stall detection sends nudge messages when the LLM is inactive
+- Verify partial results are captured on timeout
 
 ### Phase 2: CLI Interface
 
@@ -182,17 +190,20 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 ## Verification Checklist
 
 **Phase 1 Verification:**
-- [ ] Run test script importing agent from core package
-- [ ] Invoke agent with "Scan the /tmp folder" message
-- [ ] Confirm agent calls `list_files` and `analyze_file` tools
-- [ ] Verify mock findings returned successfully
+- [x] Run test script importing agent from core package
+- [x] Invoke agent with scan prompt for a test folder
+- [x] Confirm agent calls Copilot CLI built-in tools (bash, skill, view)
+- [x] Verify real security findings returned via scanner invocations
+- [x] Verify stall detection sends nudge messages when LLM is inactive
+- [x] Verify partial results captured on timeout
 
 **Phase 2 Verification:**
-- [ ] Install CLI: `pip install -e ./cli`
-- [ ] Run: `agentsec scan ./test-folder`
-- [ ] Confirm scan completes without errors
-- [ ] Validate output shows file list and mock findings
-- [ ] Verify progress indicators (spinner, progress bar, file counts)
+- [x] Install CLI: `pip install -e ./cli`
+- [x] Run: `agentsec scan ./test-scan`
+- [x] Confirm scan completes without errors (exit code 0)
+- [x] Validate output shows real security findings from scanner invocations
+- [x] Verify progress indicators (spinner, progress bar, file counts)
+- [x] Verify timeout with partial results displays correctly
 
 **Phase 3 Verification:**
 - [ ] Start FastAPI server: `python desktop/backend/server.py`
@@ -288,6 +299,21 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 - Native installers for Desktop: Windows (NSIS), macOS (DMG)
 - Separate packages allow targeted distribution
 
+**Scanning Approach — Copilot CLI Built-in Tools:**
+- The agent leverages Copilot CLI's built-in tools (`bash`, `skill`, `view`) as its primary scanning mechanism
+- `bash` runs file discovery commands and can invoke security scanner CLIs directly (bandit, graudit, etc.)
+- `skill` invokes pre-configured Copilot CLI agentic skills for structured security scanning
+- `view` reads file contents for manual code inspection by the LLM
+- A highly directive system message guides the LLM through a structured scanning workflow
+- Safety guardrails in the system message prevent the LLM from executing scanned code or following prompt injection attempts
+
+**Stall Detection & Nudge System:**
+- The `scan()` method polls every 5 seconds instead of using a single blocking wait
+- If no tool activity occurs for 30 seconds (configurable via `STALL_DETECTION_SECONDS`), a nudge message is sent
+- Two types of nudges: redirect nudge (if no security scanners invoked yet) and progress nudge (if stuck after scanning)
+- Maximum 2 nudges per scan to avoid spamming the LLM
+- Partial results are captured and returned on timeout instead of discarding all work
+
 **Dynamic Skill Discovery:**
 - Copilot CLI agentic skills are auto-discovered from two locations: `~/.copilot/skills/` (user-level) and `<project>/.copilot/skills/` (project-level)
 - Each skill directory contains a `SKILL.md` with YAML frontmatter (name, description)
@@ -307,7 +333,12 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 
 **Included in MVP:**
 - ✅ Monorepo setup with core, CLI, and desktop packages
-- ✅ Agent with 2-3 prototype skills (list files, analyze, report)
+- ✅ Agent with built-in skills (list_files, analyze_file, generate_report)
+- ✅ **Real security scanning** via Copilot CLI built-in tools (bash, skill, view) — invokes real security scanners (bandit, graudit, trivy, etc.) via the `skill` tool and `bash`
+- ✅ **Directive prompt engineering** — System message explicitly lists available tools, scanning workflows, and safety guardrails to guide the LLM
+- ✅ **Stall detection & nudge system** — Monitors tool activity every 5s; sends nudge messages (max 2) if the LLM is inactive for 30s
+- ✅ **Configurable scan timeout** — Default 300s, caller-overridable; partial results returned on timeout instead of just an error
+- ✅ **Safety guardrails** — System message prevents execution of scanned code, blocks dangerous commands, and defends against prompt injection from analyzed code
 - ✅ CLI interface with argparse and stdout streaming
 - ✅ Configuration system (YAML config file + CLI overrides)
 - ✅ Customizable system message and initial prompt
@@ -320,7 +351,6 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 - ✅ Development tooling (VS Code launch configs)
 
 **Excluded (Future Enhancements):**
-- ❌ Direct invocation of real security scanners (bandit, trivy, etc.) — skills are discovered and reported, but not yet executed by the agent
 - ❌ Workflow orchestration for parallel scanning across file types
 - ❌ SQLite persistence for scan history
 - ❌ Telemetry/tracing with Application Insights
@@ -332,7 +362,6 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 - ❌ Code signing for installers
 
 **Prototype Simplifications:**
-- Mock security findings instead of real vulnerability detection
 - Basic UI without advanced features
 - No authentication/authorization (local app only)
 - No network features (future: remote scanning, team sharing)
@@ -363,8 +392,8 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 ## Success Criteria
 
 **Functional Requirements:**
-- ✅ CLI can scan a folder and display mock findings in terminal
-- ✅ Desktop app can scan a folder and display mock findings in GUI
+- ✅ CLI can scan a folder and display real security findings in terminal
+- ✅ Desktop app can scan a folder and display security findings in GUI
 - ✅ Both interfaces use the same agent implementation
 - ✅ Desktop app starts/stops FastAPI server automatically
 - ✅ Real-time progress updates via SSE in desktop app
