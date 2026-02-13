@@ -294,6 +294,11 @@ class SecurityScannerAgent:
                             event.data, 'tool_call_id', None
                         )
 
+                        # Extract tool arguments FIRST so they are available
+                        # for all subsequent checks (scanner detection, detail
+                        # extraction, etc.)
+                        tool_args = _extract_tool_arguments(event.data)
+
                         # Check if the LLM is using security scanners
                         if tool_name in SCANNING_TOOL_NAMES:
                             scanner_was_invoked["value"] = True
@@ -311,11 +316,10 @@ class SecurityScannerAgent:
                             if first_word in scanner_cmds:
                                 scanner_was_invoked["value"] = True
 
-                        # Try to extract arguments for more detail about
-                        # what specific file or command is being used
+                        # Extract detail about what specific file, command,
+                        # or skill is being used for richer log messages
                         detail = ""
                         file_path = None
-                        tool_args = _extract_tool_arguments(event.data)
 
                         if tool_name == "view" and tool_args:
                             # The "view" tool reads a file — track as file scan
@@ -337,6 +341,10 @@ class SecurityScannerAgent:
                                     detail = cmd_parts[0]
                         elif tool_name == "skill" and tool_args:
                             # Extract the skill name being invoked
+                            # The Copilot CLI "skill" tool wraps external
+                            # agentic skills (e.g., bandit, graudit, trivy).
+                            # We surface the actual skill name so the user
+                            # can see which scanner is running.
                             skill_name = tool_args.get(
                                 "name",
                                 tool_args.get(
@@ -346,6 +354,7 @@ class SecurityScannerAgent:
                             )
                             if skill_name:
                                 detail = skill_name
+
                         # Store mapping so we can resolve names on completion
                         if tool_call_id:
                             self._tool_call_map[tool_call_id] = {
@@ -365,8 +374,15 @@ class SecurityScannerAgent:
                                 if tracker:
                                     tracker.start_file(file_path)
 
-                        # Log with detail for better visibility
-                        if detail:
+                        # Log with detail for better visibility.
+                        # For the "skill" tool we surface the external skill
+                        # name prominently so operators can see which scanner
+                        # the LLM chose to invoke.
+                        if tool_name == "skill" and detail:
+                            logger.info(
+                                f"  -> Skill invoked: {detail}"
+                            )
+                        elif detail:
                             logger.info(
                                 f"  -> Tool started: {tool_name} ({detail})"
                             )
@@ -382,13 +398,26 @@ class SecurityScannerAgent:
                             event.data, 'tool_call_id', 'unknown'
                         )
 
-                        # Look up the tool name from our tracking map
-                        tool_info = self._tool_call_map.get(
-                            tool_call_id, {}
+                        # Look up the tool name from our tracking map.
+                        # If the start event was not captured (e.g., the
+                        # SDK emitted a completion for a tool we never
+                        # saw start), we try to read the tool_name
+                        # directly from the completion event data.
+                        tool_info = self._tool_call_map.pop(
+                            tool_call_id, None
                         )
-                        tool_name = tool_info.get("name", "unknown")
-                        detail = tool_info.get("detail", "")
-                        file_path = tool_info.get("file_path")
+                        if tool_info:
+                            tool_name = tool_info.get("name", "unknown")
+                            detail = tool_info.get("detail", "")
+                            file_path = tool_info.get("file_path")
+                        else:
+                            # Fallback: try to read from the event itself
+                            tool_name = getattr(
+                                event.data, 'tool_name',
+                                getattr(event.data, 'name', 'unknown')
+                            )
+                            detail = ""
+                            file_path = None
 
                         # Update progress tracker when a file read completes
                         # Only track actual files, not directories
@@ -400,8 +429,14 @@ class SecurityScannerAgent:
                                 if tracker:
                                     tracker.finish_file(file_path, issues_found=0)
 
-                        # Log with tool name instead of opaque ID
-                        if detail:
+                        # Log with tool name instead of opaque ID.
+                        # For the "skill" tool we show the skill name
+                        # to match the "Skill invoked" start message.
+                        if tool_name == "skill" and detail:
+                            logger.info(
+                                f"  <- Skill completed: {detail}"
+                            )
+                        elif detail:
                             logger.info(
                                 f"  <- Tool completed: {tool_name} ({detail})"
                             )
@@ -428,8 +463,14 @@ class SecurityScannerAgent:
                         scan_error["error"] = error_msg
                         scan_complete.set()
 
-                except (AttributeError, ValueError) as enum_error:
-                    logger.debug(f"[EVENT] Could not match enum: {enum_error}")
+                except Exception as handler_error:
+                    # Catch ALL exceptions so a single bad event never
+                    # crashes the entire event loop.  Log at debug level
+                    # because most of these are harmless SDK quirks.
+                    logger.debug(
+                        f"[EVENT] Error handling event "
+                        f"{event_type_str}: {handler_error}"
+                    )
 
                 # Also check for error events
                 try:
