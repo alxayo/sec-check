@@ -127,12 +127,13 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 
 - `agentsec/core/agentsec/agent.py` — Define `SecurityScannerAgent` using `Agent()` class with system instructions and tool registration
 - `agentsec/core/agentsec/skills.py` — Implement `@tool` decorated functions for file scanning skills: `list_files`, `analyze_file`, `generate_report`
-- `agentsec/core/pyproject.toml` — Python package config with dependencies on `agent-framework-core==1.0.0b260107`
+- `agentsec/core/agentsec/config.py` — Configuration management with `AgentSecConfig` class for loading YAML config and CLI overrides
+- `agentsec/core/pyproject.toml` — Python package config with dependencies on `agent-framework-core==1.0.0b260107` and `pyyaml>=6.0`
 - `agentsec/core/README.md` — Agent architecture and skills development documentation
 
 **CLI Package:**
 
-- `agentsec/cli/agentsec_cli/main.py` — CLI entry point with argparse, imports agent from core, handles stdin/stdout interaction
+- `agentsec/cli/agentsec_cli/main.py` — CLI entry point with argparse, imports agent from core, handles stdin/stdout interaction, supports config file and CLI overrides for system message and prompts
 - `agentsec/cli/pyproject.toml` — CLI package configuration for PyPI distribution
 - `agentsec/cli/README.md` — CLI installation and usage instructions
 
@@ -159,6 +160,7 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 **Configuration:**
 
 - `agentsec/.env.example` — Template for Azure OpenAI endpoint, API key, deployment name
+- `agentsec/agentsec.example.yaml` — Example YAML configuration file with system_message and initial_prompt settings
 - `agentsec/.gitignore` — Ignore venv, node_modules, .env, build artifacts
 - `agentsec/README.md` — Root project documentation with architecture overview
 
@@ -297,9 +299,12 @@ Build a cross-platform security scanning application using GitHub Copilot SDK (h
 - ✅ Monorepo setup with core, CLI, and desktop packages
 - ✅ Agent with 2-3 prototype skills (list files, analyze, report)
 - ✅ CLI interface with argparse and stdout streaming
+- ✅ Configuration system (YAML config file + CLI overrides)
+- ✅ Customizable system message and initial prompt
+- ✅ External prompt file support
 - ✅ Next.js GUI with folder selection and results display
 - ✅ Electron wrapper with FastAPI subprocess management
-- ✅ Basic documentation (README files, .env.example)
+- ✅ Basic documentation (README files, .env.example, agentsec.example.yaml)
 - ✅ Development tooling (VS Code launch configs)
 
 **Excluded (Future Enhancements):**

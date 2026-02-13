@@ -48,6 +48,12 @@ agentsec scan .
 
 # Scan any project
 agentsec scan /path/to/your/project
+
+# Use a custom configuration file
+agentsec scan ./src --config ./agentsec.yaml
+
+# Override the system message
+agentsec scan ./src --system-message-file ./custom-prompt.txt
 ```
 
 ## Setup Details
@@ -73,11 +79,31 @@ AgentSec currently detects:
 - ⚠️ **Medium Risk**: Hardcoded credentials and secrets
 - ℹ️ **Low Risk**: Potentially dangerous imports (`subprocess`, `os`, `pickle`)
 
+## Configuration
+
+AgentSec can be configured via:
+
+1. **YAML config file** (`agentsec.yaml`) — Set default system message and initial prompt
+2. **CLI arguments** — Override config file settings per-run
+3. **External prompt files** — Store long prompts in separate files
+
+See [agentsec.example.yaml](agentsec.example.yaml) for a full example with comments.
+
+**CLI Options:**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--config FILE` | `-c` | Path to YAML config file |
+| `--system-message TEXT` | `-s` | Override system message |
+| `--system-message-file FILE` | `-sf` | Load system message from file |
+| `--prompt TEXT` | `-p` | Override initial prompt template |
+| `--prompt-file FILE` | `-pf` | Load initial prompt from file |
+
 ## Documentation
 
 - **[SETUP.md](SETUP.md)** — Complete setup and testing guide
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — Project architecture and development guide
 - **[spec/plan-agentSec.md](spec/plan-agentSec.md)** — Implementation roadmap and design
+- **[agentsec.example.yaml](agentsec.example.yaml)** — Example configuration file
 
 ## Architecture
 

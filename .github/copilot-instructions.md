@@ -10,6 +10,7 @@ agentsec/
 ├── core/                  # Shared agent + skills (Python)
 │   └── agentsec/
 │       ├── agent.py      # SecurityScannerAgent class
+│       ├── config.py     # AgentSecConfig for customization
 │       └── skills.py     # @tool decorated skill functions
 ├── cli/                  # Command-line interface (Python)
 │   └── agentsec_cli/
@@ -84,6 +85,10 @@ asyncio.run(SecurityScannerAgent().scan('./test-folder'))
 # Test CLI locally
 agentsec scan ./test-folder
 
+# Test with custom configuration
+agentsec scan ./test-folder --config ./agentsec.yaml
+agentsec scan ./test-folder --system-message-file ./custom-prompt.txt
+
 # Test in clean environment before publishing
 pip install -e .  # Local install
 which agentsec    # Verify command available
@@ -123,6 +128,88 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # Test end-to-end: select folder → click scan → stream results
 ```
+
+---
+
+## Configuration System
+
+AgentSec supports customizable system messages and prompts via configuration files and CLI options.
+
+### Configuration Priority (highest to lowest)
+1. **CLI arguments** — `--system-message`, `--prompt`, etc.
+2. **Config file** — `agentsec.yaml` or file specified via `--config`
+3. **Built-in defaults** — hardcoded in `config.py`
+
+### Using Configuration
+
+**Via YAML file** (`agentsec.yaml`):
+```yaml
+# Set the AI's system prompt
+system_message: |
+  You are a security expert focusing on Python web apps.
+  Focus on SQL injection and XSS vulnerabilities.
+
+# Or load from external file
+# system_message_file: ./prompts/system.txt
+
+# Set the initial scan prompt template
+initial_prompt: |
+  Scan {folder_path} for security issues.
+  Focus on HIGH severity only.
+
+# Or load from external file
+# initial_prompt_file: ./prompts/scan.txt
+```
+
+**Via CLI**:
+```bash
+# Use config file
+agentsec scan ./src --config ./agentsec.yaml
+
+# Override system message directly
+agentsec scan ./src --system-message "You are a security expert..."
+
+# Load system message from file
+agentsec scan ./src --system-message-file ./prompts/system.txt
+
+# Override initial prompt
+agentsec scan ./src --prompt "Quick scan of {folder_path}"
+
+# Load prompt from file
+agentsec scan ./src --prompt-file ./prompts/scan.txt
+```
+
+**Programmatically**:
+```python
+from agentsec.config import AgentSecConfig
+from agentsec.agent import SecurityScannerAgent
+
+# Load from YAML
+config = AgentSecConfig.load("./agentsec.yaml")
+
+# Or create custom config
+config = AgentSecConfig(
+    system_message="Custom AI instructions...",
+    initial_prompt="Scan {folder_path} for issues."
+)
+
+# Apply CLI overrides
+config = config.with_overrides(
+    system_message_file="./custom-system.txt"
+)
+
+# Create agent with config
+agent = SecurityScannerAgent(config=config)
+```
+
+### Config File Search Paths
+
+`AgentSecConfig.load()` auto-searches for config files in:
+1. Current directory: `agentsec.yaml`, `agentsec.yml`, `.agentsec.yaml`, `.agentsec.yml`
+2. User home directory
+3. `~/.config/agentsec/`
+
+See [agentsec.example.yaml](../agentsec.example.yaml) for a full example with comments.
 
 ---
 
@@ -260,6 +347,7 @@ with open("/tmp/agentsec-port.txt", "w") as f:
 **PINNED** (do not change without testing):
 - `agent-framework-core==1.0.0b260107`
 - `agent-framework-azure-ai==1.0.0b260107`
+- `pyyaml>=6.0` (for configuration files)
 
 **Flexible**:
 - Python: 3.12 (recommended), 3.11 (supported), 3.10+ (minimum)
@@ -278,9 +366,11 @@ All Python code uses `.vscode/python-copilot-sdk.instructions.md` for detailed a
 | `.vscode/copilot-sdk.instructions.md` | SDK fundamentals (sessions, models, auth) |
 | `.vscode/python-copilot-sdk.instructions.md` | Python patterns + AgentSec best practices |
 | `spec/plan-agentSec.md` | Architecture & implementation roadmap |
+| `agentsec.example.yaml` | Example configuration file with documentation |
 | `core/agentsec/agent.py` | SecurityScannerAgent entry point |
+| `core/agentsec/config.py` | AgentSecConfig for customizable prompts |
 | `core/agentsec/skills.py` | @tool skill definitions |
-| `cli/agentsec_cli/main.py` | CLI command routing |
+| `cli/agentsec_cli/main.py` | CLI command routing with config options |
 | `desktop/backend/server.py` | FastAPI + agent exposure |
 | `desktop/frontend/pages/index.tsx` | Next.js UI entry point |
 
@@ -307,6 +397,12 @@ Always:
 
 **Q: Where does the agent get defined?**  
 A: `core/agentsec/agent.py` → `SecurityScannerAgent` class
+
+**Q: How do I customize the agent's behavior?**  
+A: Use `AgentSecConfig` from `core/agentsec/config.py` to set custom system message or prompt
+
+**Q: How do I configure the agent via command line?**  
+A: Use CLI options: `--config`, `--system-message`, `--system-message-file`, `--prompt`, `--prompt-file`
 
 **Q: How do I add a new scanning capability?**  
 A: Create async `@tool` function in `core/agentsec/skills.py`

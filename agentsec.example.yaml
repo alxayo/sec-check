@@ -1,0 +1,94 @@
+# AgentSec Configuration File
+# ============================
+#
+# This file configures the AgentSec security scanner.
+# Copy this file to 'agentsec.yaml' in your project root and customize it.
+#
+# The CLI will automatically search for config files in:
+#   1. Current directory (agentsec.yaml, agentsec.yml, .agentsec.yaml, .agentsec.yml)
+#   2. Home directory
+#   3. ~/.config/agentsec/
+#
+# You can also specify a config file explicitly:
+#   agentsec scan ./src --config ./my-config.yaml
+#
+# CLI arguments always override config file settings.
+
+
+# System Message
+# ==============
+# The system message tells the AI who it is and how to behave.
+# It's sent to the LLM at the start of each session.
+#
+# You can either:
+#   1. Write the message directly here (system_message)
+#   2. Point to an external file (system_message_file)
+#
+# If both are provided, 'system_message' takes priority.
+
+system_message: |
+  You are AgentSec, an AI-powered security scanning agent.
+  
+  Your job is to analyze source code for security vulnerabilities using the
+  tools provided to you.
+  
+  When asked to scan a folder:
+  1. Use the list_files tool to get all files in the target folder.
+  2. Use the analyze_file tool on each file to check for security issues.
+  3. Use the generate_report tool to create a summary of all findings.
+  
+  Always be thorough and check every file. Provide clear, actionable
+  recommendations for any issues you find. Be concise but complete.
+
+# Or use an external file:
+# system_message_file: ./prompts/system-message.txt
+
+
+# Initial Prompt
+# ==============
+# The initial prompt is the template used when starting a scan.
+# Use {folder_path} as a placeholder for the target folder.
+#
+# You can either:
+#   1. Write the prompt directly here (initial_prompt)
+#   2. Point to an external file (initial_prompt_file)
+#
+# If both are provided, 'initial_prompt' takes priority.
+
+initial_prompt: |
+  Please perform a security scan of the folder: {folder_path}
+  
+  Steps:
+  1. List all files in {folder_path}
+  2. Analyze each file for security issues
+  3. Generate a summary report with all findings
+
+# Or use an external file:
+# initial_prompt_file: ./prompts/scan-prompt.txt
+
+
+# Advanced Examples
+# =================
+#
+# Example 1: Minimal config with external files
+# ---------------------------------------------
+# system_message_file: ./prompts/system.txt
+# initial_prompt_file: ./prompts/scan.txt
+#
+#
+# Example 2: Custom security focus
+# --------------------------------
+# system_message: |
+#   You are a security expert specializing in Python web applications.
+#   Focus especially on:
+#   - SQL injection vulnerabilities
+#   - Cross-site scripting (XSS)
+#   - Authentication and authorization issues
+#   - Sensitive data exposure
+#
+#
+# Example 3: Brief scanning mode
+# ------------------------------
+# initial_prompt: |
+#   Quick security check of {folder_path}. 
+#   Only report HIGH severity issues.

@@ -620,271 +620,71 @@ assert report["high_count"] == 1
 
 ---
 
-### [ ] Task 1.7 — Implement `SecurityScannerAgent` class `[S]`
+### [x] Task 1.7 — Implement `SecurityScannerAgent` class `[S]`
 
 **Depends on**: 1.5, 1.6
 **COMMIT**: `feat(core): implement SecurityScannerAgent with session lifecycle`
+**STATUS**: ✅ COMPLETED
 
-**What to do**:
+**What was done**:
+- Implemented `SecurityScannerAgent` class with `initialize()`, `scan()`, and `cleanup()` methods
+- Agent accepts optional `AgentSecConfig` parameter for customization
+- Uses system_message and initial_prompt from configuration
 
-Replace the placeholder in `core/agentsec/agent.py` with the full agent class.
+---
 
-**Full code for `core/agentsec/agent.py`**:
-```python
-"""
-SecurityScannerAgent — the main agent class for AgentSec.
+### [x] Task 1.7b — Implement Configuration System `[S]`
 
-This module contains the SecurityScannerAgent class which uses the
-GitHub Copilot SDK to analyze code for security vulnerabilities.
-Both the CLI and the Desktop app import this class.
+**Depends on**: 1.7
+**COMMIT**: `feat(core): add AgentSecConfig for customizable system message and prompts`
+**STATUS**: ✅ COMPLETED
 
-Usage:
-    agent = SecurityScannerAgent()
-    try:
-        await agent.initialize()
-        result = await agent.scan("./my_project")
-        print(result)
-    finally:
-        await agent.cleanup()
-"""
+**What was done**:
 
-import asyncio
-import logging
-from typing import Optional
+1. Created `core/agentsec/config.py` with `AgentSecConfig` dataclass:
+   - `system_message`: The AI's system prompt (who it is, what it does)
+   - `initial_prompt`: The prompt template for scans (use `{folder_path}` placeholder)
+   - `load()`: Load configuration from YAML file or defaults
+   - `with_overrides()`: Apply CLI overrides to existing config
+   - `format_prompt()`: Replace `{folder_path}` placeholder
 
-from copilot import CopilotClient, SessionConfig, MessageOptions
-from dotenv import load_dotenv
+2. Configuration sources (in priority order):
+   - CLI arguments (highest priority)
+   - YAML config file (`agentsec.yaml`)
+   - Built-in defaults (lowest priority)
 
-# Import skills so they are registered with the agent framework
-from agentsec.skills import list_files, analyze_file, generate_report  # noqa: F401
+3. Config file search paths:
+   - Current directory: `agentsec.yaml`, `agentsec.yml`, `.agentsec.yaml`, `.agentsec.yml`
+   - User home directory
+   - `~/.config/agentsec/`
 
-# Load environment variables from .env file at the workspace root
-load_dotenv()
+4. External file support:
+   - `system_message_file`: Path to file containing system message
+   - `initial_prompt_file`: Path to file containing initial prompt
 
-# Set up logging
-logger = logging.getLogger(__name__)
+5. Updated dependencies:
+   - Added `pyyaml>=6.0` to `core/pyproject.toml`
 
-
-# System prompt that tells the LLM what it should do
-SYSTEM_MESSAGE = """You are AgentSec, an AI-powered security scanning agent.
-
-Your job is to analyze source code for security vulnerabilities using the
-tools provided to you.
-
-When asked to scan a folder:
-1. Use the list_files tool to get all files in the target folder.
-2. Use the analyze_file tool on each file to check for security issues.
-3. Use the generate_report tool to create a summary of all findings.
-
-Always be thorough and check every file. Provide clear, actionable
-recommendations for any issues you find. Be concise but complete.
-"""
-
-
-class SecurityScannerAgent:
-    """
-    Main security scanning agent for AgentSec.
-
-    This agent connects to the GitHub Copilot SDK, creates a session,
-    and uses skills (tools) to scan code for security vulnerabilities.
-
-    The agent follows a simple lifecycle:
-        1. __init__()    — create the agent object (no connections yet)
-        2. initialize()  — connect to Copilot and create a session
-        3. scan()        — run a security scan on a folder
-        4. cleanup()     — disconnect and free resources
-
-    Example:
-        >>> agent = SecurityScannerAgent()
-        >>> try:
-        ...     await agent.initialize()
-        ...     result = await agent.scan("./src")
-        ...     print(result["status"])
-        ... finally:
-        ...     await agent.cleanup()
-    """
-
-    def __init__(self) -> None:
-        """
-        Initialize the agent object.
-
-        This does NOT connect to Copilot yet. Call initialize() to connect.
-        """
-        self.client: Optional[CopilotClient] = None
-        self.session = None
-
-    async def initialize(self) -> None:
-        """
-        Connect to Copilot and create a session.
-
-        This method must be called before using scan(). It:
-        1. Creates a CopilotClient (connection to Copilot CLI)
-        2. Starts the client
-        3. Creates a session with agent instructions
-
-        Raises:
-            FileNotFoundError: If Copilot CLI is not installed
-            ConnectionError: If authentication fails
-        """
-        try:
-            # Create the client that talks to Copilot CLI
-            self.client = CopilotClient()
-            await self.client.start()
-
-            # Create a session (a conversation context)
-            # The system_message tells the LLM what its role is
-            self.session = await self.client.create_session(
-                SessionConfig(
-                    model="gpt-5",
-                    system_message={"content": SYSTEM_MESSAGE},
-                )
-            )
-
-            logger.info("SecurityScannerAgent initialized successfully")
-
-        except FileNotFoundError:
-            logger.error(
-                "Copilot CLI not found. "
-                "Install it: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"
-            )
-            raise
-        except Exception as error:
-            logger.error(f"Failed to initialize agent: {error}")
-            raise
-
-    async def scan(self, folder_path: str) -> dict:
-        """
-        Run a security scan on a folder.
-
-        This sends a prompt to the LLM asking it to scan the given folder.
-        The LLM will call the skills (list_files, analyze_file, generate_report)
-        automatically based on its instructions.
-
-        Args:
-            folder_path: Path to the folder to scan.
-                         Example: "./src" or "C:\\code\\myapp"
-
-        Returns:
-            A dictionary with:
-            - "status": "success", "timeout", or "error"
-            - "result": The scan output (if successful)
-            - "error": Error description (if failed)
-
-        Example:
-            >>> result = await agent.scan("./src")
-            >>> if result["status"] == "success":
-            ...     print(result["result"])
-        """
-        # Make sure the agent was initialized first
-        if not self.session:
-            return {
-                "status": "error",
-                "error": "Agent not initialized. Call initialize() first.",
-            }
-
-        try:
-            # Build the scan prompt
-            scan_prompt = (
-                f"Please perform a security scan of the folder: {folder_path}\n\n"
-                f"Steps:\n"
-                f"1. List all files in {folder_path}\n"
-                f"2. Analyze each file for security issues\n"
-                f"3. Generate a summary report with all findings\n"
-            )
-
-            logger.info(f"Starting scan of {folder_path}")
-
-            # Send the prompt and wait for the response
-            # We allow up to 2 minutes for the scan to complete
-            response = await self.session.send_and_wait(
-                MessageOptions(prompt=scan_prompt),
-                timeout=120.0,
-            )
-
-            # Check if we got a response
-            if response and response.data and response.data.content:
-                logger.info(f"Scan completed for {folder_path}")
-                return {
-                    "status": "success",
-                    "result": response.data.content,
-                }
-            else:
-                return {
-                    "status": "error",
-                    "error": "No response received from Copilot",
-                }
-
-        except TimeoutError:
-            logger.error("Scan timed out after 120 seconds")
-            return {
-                "status": "timeout",
-                "error": "Scan took too long (>120 seconds). Try a smaller folder.",
-            }
-        except Exception as error:
-            logger.error(f"Scan failed: {error}")
-            return {
-                "status": "error",
-                "error": str(error),
-            }
-
-    async def cleanup(self) -> None:
-        """
-        Disconnect from Copilot and free all resources.
-
-        This method MUST be called when you are done with the agent.
-        Use it in a finally block to guarantee cleanup even if errors occur.
-
-        Example:
-            >>> try:
-            ...     await agent.initialize()
-            ...     await agent.scan("./src")
-            ... finally:
-            ...     await agent.cleanup()
-        """
-        try:
-            # Destroy the session if it exists
-            if self.session:
-                await self.session.destroy()
-                self.session = None
-
-            # Stop the client if it exists
-            if self.client:
-                await self.client.stop()
-                self.client = None
-
-            logger.info("SecurityScannerAgent cleaned up successfully")
-
-        except Exception as error:
-            # Log but don't re-raise — cleanup should not crash the app
-            logger.error(f"Error during cleanup: {error}")
-```
-
-Update `core/agentsec/__init__.py` to export the agent:
-```python
-"""
-AgentSec Core — shared agent and skills library.
-"""
-
-__version__ = "0.1.0"
-
-from agentsec.agent import SecurityScannerAgent
-
-__all__ = ["SecurityScannerAgent"]
-```
+6. Created example config file:
+   - `agentsec.example.yaml` with documentation and examples
 
 **Verification**:
 ```python
-import asyncio
-from agentsec.agent import SecurityScannerAgent
+from agentsec.config import AgentSecConfig
 
-async def test():
-    agent = SecurityScannerAgent()
-    # Just verify construction and attribute initialization
-    assert agent.client is None
-    assert agent.session is None
-    print("SecurityScannerAgent construction OK")
+# Load from defaults
+config = AgentSecConfig()
+print(config.system_message[:50])  # Should print default message
 
-asyncio.run(test())
+# Load from file
+config = AgentSecConfig.load("./agentsec.yaml")
+
+# Apply overrides
+config = config.with_overrides(system_message="Custom AI...")
+
+# Format prompt
+prompt = config.format_prompt("./my-project")
+print(prompt)  # Should include "./my-project"
 ```
 
 ---
@@ -1037,8 +837,8 @@ Task 1.1 ───────────────────────�
   (root files)         [PARALLEL] │
                                   ├──► Task 1.3 ──► Task 1.4 ──┬──► Task 1.5 ─┐
 Task 1.2 ─────────────────────────┘     (venv)      (list_files)│  (analyze)   │
-  (core scaffolding)   [PARALLEL]                               │              ├──► Task 1.7 ──► Task 1.8
-                                                                └──► Task 1.6 ─┘   (agent)       (tests)
+  (core scaffolding)   [PARALLEL]                               │              ├──► Task 1.7 ──► Task 1.7b ──► Task 1.8
+                                                                └──► Task 1.6 ─┘   (agent)       (config)       (tests)
                                                                     (report)
 ```
 
@@ -1100,217 +900,79 @@ Task 1.2 ───────────────────────�
 
 ---
 
-### [ ] Task 2.2 — Implement CLI main entry point `[S]`
+### [x] Task 2.2 — Implement CLI main entry point `[S]`
 
-**Depends on**: 2.1
-**COMMIT**: `feat(cli): implement scan command with argparse and progress output`
+**Depends on**: 2.1, 1.7b
+**COMMIT**: `feat(cli): implement scan command with argparse, config support, and progress output`
+**STATUS**: ✅ COMPLETED
 
-**What to do**:
+**What was done**:
 
-Replace placeholder `cli/agentsec_cli/main.py` with full implementation.
+Implemented `cli/agentsec_cli/main.py` with full configuration support:
 
-**Full code for `cli/agentsec_cli/main.py`**:
-```python
-"""
-AgentSec CLI — command-line interface for security scanning.
+1. **Configuration options for scan command**:
+   - `--config`, `-c`: Path to YAML config file
+   - `--system-message`, `-s`: Override system message text
+   - `--system-message-file`, `-sf`: Load system message from file
+   - `--prompt`, `-p`: Override initial prompt template
+   - `--prompt-file`, `-pf`: Load initial prompt from file
 
-This module provides the entry point for the `agentsec` command.
-It uses argparse to parse commands and calls the SecurityScannerAgent
-from the core package.
+2. **Configuration loading flow**:
+   - Load from config file (or auto-search for `agentsec.yaml`)
+   - Apply CLI overrides (CLI takes priority over config file)
+   - Pass config to `SecurityScannerAgent`
 
-Usage:
-    agentsec scan ./my_project
-    agentsec --version
-    agentsec --help
-"""
+3. **Mutual exclusivity**:
+   - `--system-message` and `--system-message-file` are mutually exclusive
+   - `--prompt` and `--prompt-file` are mutually exclusive
 
-import argparse
-import asyncio
-import logging
-import sys
-from pathlib import Path
+**Usage examples**:
+```bash
+# Basic scan
+agentsec scan ./src
 
-from agentsec.agent import SecurityScannerAgent
+# With config file
+agentsec scan ./src --config ./agentsec.yaml
 
-# Configure logging for the CLI
-# We use INFO level so users see important messages but not debug noise
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",  # Simple format for CLI output
-)
-logger = logging.getLogger(__name__)
+# Override system message
+agentsec scan ./src --system-message "You are a security expert..."
 
+# Load system message from file
+agentsec scan ./src --system-message-file ./prompts/system.txt
 
-async def run_scan(folder: str) -> int:
-    """
-    Execute a security scan on the given folder.
+# Override initial prompt
+agentsec scan ./src --prompt "Quick scan of {folder_path}"
 
-    This function:
-    1. Validates that the folder exists
-    2. Creates and initializes the SecurityScannerAgent
-    3. Runs the scan
-    4. Prints results to stdout
-    5. Cleans up the agent resources
-
-    Args:
-        folder: Path to the folder to scan (absolute or relative)
-
-    Returns:
-        Exit code: 0 for success, 1 for error, 2 for timeout
-    """
-    # Step 1: Validate the folder path
-    folder_path = Path(folder).resolve()
-
-    if not folder_path.exists():
-        print(f"Error: Folder not found: {folder_path}", file=sys.stderr)
-        return 1
-
-    if not folder_path.is_dir():
-        print(f"Error: Not a directory: {folder_path}", file=sys.stderr)
-        return 1
-
-    # Step 2: Create the agent
-    agent = SecurityScannerAgent()
-
-    try:
-        # Step 3: Initialize (connect to Copilot)
-        print("Starting AgentSec security scanner...")
-        print()
-        await agent.initialize()
-
-        # Step 4: Run the scan
-        print(f"Scanning: {folder_path}")
-        print("This may take a moment...")
-        print()
-
-        result = await agent.scan(str(folder_path))
-
-        # Step 5: Display results based on status
-        if result["status"] == "success":
-            print(result["result"])
-            return 0
-
-        elif result["status"] == "timeout":
-            print(f"Timeout: {result['error']}", file=sys.stderr)
-            return 2
-
-        else:
-            print(f"Error: {result['error']}", file=sys.stderr)
-            return 1
-
-    except FileNotFoundError:
-        print(
-            "Error: Copilot CLI not found.\n"
-            "Install it: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli\n"
-            "Then run: copilot auth login",
-            file=sys.stderr,
-        )
-        return 1
-
-    except Exception as error:
-        print(f"Unexpected error: {error}", file=sys.stderr)
-        return 1
-
-    finally:
-        # Step 6: Always clean up resources
-        await agent.cleanup()
-
-
-def main() -> None:
-    """
-    Main entry point for the agentsec CLI command.
-
-    This function:
-    1. Sets up the argument parser with commands
-    2. Parses the user's input
-    3. Routes to the appropriate command handler
-    4. Sets the process exit code
-
-    Commands:
-        scan <folder>   Scan a folder for security issues
-        --version       Show the version number
-        --help          Show help message
-    """
-    # Create the top-level parser
-    parser = argparse.ArgumentParser(
-        prog="agentsec",
-        description="AgentSec — AI-powered security scanner for code",
-        epilog=(
-            "Examples:\n"
-            "  agentsec scan ./my_project     Scan a project folder\n"
-            "  agentsec scan .                Scan current directory\n"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    # Add --version to the top-level parser
-    parser.add_argument(
-        "--version",
-        action="version",
-        version="agentsec 0.1.0",
-    )
-
-    # Create subcommands
-    subparsers = parser.add_subparsers(
-        dest="command",
-        title="commands",
-        description="Available commands",
-    )
-
-    # Add the 'scan' subcommand
-    scan_parser = subparsers.add_parser(
-        "scan",
-        help="Scan a folder for security vulnerabilities",
-        description="Scan all files in a folder for security issues",
-    )
-    scan_parser.add_argument(
-        "folder",
-        help="Path to the folder to scan (e.g., ./src or C:\\code\\myapp)",
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # Route to the correct command
-    if args.command == "scan":
-        exit_code = asyncio.run(run_scan(args.folder))
-        sys.exit(exit_code)
-    else:
-        # No command given — show help
-        parser.print_help()
-        sys.exit(0)
-
-
-if __name__ == "__main__":
-    main()
+# Load prompt from file
+agentsec scan ./src --prompt-file ./prompts/scan.txt
 ```
 
 **Verification**:
 ```powershell
-# From workspace root (venv activated):
 pip install -e ./cli
-agentsec --version        # Should print: agentsec 0.1.0
-agentsec --help           # Should show help text
-agentsec scan --help      # Should show scan help
+agentsec --version              # Should print: agentsec 0.1.0
+agentsec --help                 # Should show help text
+agentsec scan --help            # Should show scan help with config options
+agentsec scan ./core --config ./agentsec.example.yaml  # Should use config
 ```
 
 ---
 
-### [ ] Task 2.3 — Create CLI README `[P]`
+### [x] Task 2.3 — Create CLI README `[P]`
 
 **Depends on**: 2.2
-**COMMIT**: `docs(cli): add README with installation and usage instructions`
+**COMMIT**: `docs(cli): add README with installation, usage, and configuration instructions`
+**STATUS**: ✅ COMPLETED
 
-**What to do**:
+**What was done**:
 
-Write `cli/README.md` with:
+Updated `cli/README.md` with:
 - Package description
-- Installation instructions (`pip install agentsec`)
-- Usage examples for all commands
-- Configuration section pointing to `.env.example`
-- Troubleshooting section for common errors
-
-**Verification**: File renders correctly in a Markdown viewer.
+- Installation instructions
+- Usage examples including configuration options
+- Configuration section explaining YAML file and CLI overrides
+- Table of CLI options
+- Troubleshooting section
 
 ---
 
@@ -1350,8 +1012,8 @@ Write `cli/README.md` with:
 ## Phase 2 Dependency Graph
 
 ```
-Task 1.7 (agent) ──► Task 2.1 ──► Task 2.2 ──┬──► Task 2.3 (README) [PARALLEL]
-                      (scaffold)   (main.py)   └──► Task 2.4 (e2e verify) [SEQUENTIAL]
+Task 1.7b (config) ──► Task 2.1 ──► Task 2.2 ──┬──► Task 2.3 (README) [PARALLEL]
+                        (scaffold)   (main.py)   └──► Task 2.4 (e2e verify) [SEQUENTIAL]
 ```
 
 ---
@@ -3052,14 +2714,14 @@ PHASE 1 — Core Agent Foundation
           [PARALLEL]                                                  └──► 1.6 (report) ──┤
                                                                             [PARALLEL]    │
                                                                                           ▼
-                                                                         1.7 (agent) ──► 1.8 (tests)
+                                                              1.7 (agent) ──► 1.7b (config) ──► 1.8 (tests)
 
 PHASE 2 — CLI Interface                                PHASE 3 — GUI Backend
 ═══════════════════════                                ═══════════════════════
 
-  1.7 ──► 2.1 (scaffold) ──► 2.2 (main.py)            1.7 ──┬──► 3.1 (scaffold) [P] ──┐
-              ──┬──► 2.3 (README) [P]                        └──► 3.2 (health)   [P] ──┤
-              └──► 2.4 (e2e)      [S]                                                   ▼
+  1.7b ──► 2.1 (scaffold) ──► 2.2 (main.py)           1.7b ──┬──► 3.1 (scaffold) [P] ──┐
+               ──┬──► 2.3 (README) [P]                        └──► 3.2 (health)   [P] ──┤
+               └──► 2.4 (e2e)      [S]                                                   ▼
                                                                       3.3 (scan API) ──► 3.4 (shutdown)
 
 PHASE 4 — GUI Frontend
@@ -3095,10 +2757,10 @@ PHASE 6 — Docs & Tooling
 The **critical path** — the longest chain of sequential dependencies that determines the minimum project duration — is:
 
 ```
-1.2 → 1.3 → 1.4 → 1.5 → 1.7 → 1.8 → 3.1/3.2 → 3.3 → 4.5 → 4.6 → 5.1 → 5.2 → 5.5 → 5.6 → 6.1
+1.2 → 1.3 → 1.4 → 1.5 → 1.7 → 1.7b → 1.8 → 3.1/3.2 → 3.3 → 4.5 → 4.6 → 5.1 → 5.2 → 5.5 → 5.6 → 6.1
 ```
 
-**Total tasks on critical path**: ~15 commits
+**Total tasks on critical path**: ~16 commits
 
 **Parallelizable tasks** (can be done alongside the critical path):
 - 1.1, 1.6, 2.1–2.4, 4.1–4.4, 5.3, 5.4, 6.2–6.5
@@ -3107,41 +2769,42 @@ The **critical path** — the longest chain of sequential dependencies that dete
 
 ## Summary Table
 
-| Phase | Task | Description | Depends on | Parallel? |
-|-------|------|-------------|-----------|-----------|
-| 1 | 1.1 | Root files (.gitignore, .env.example) | — | P with 1.2 |
-| 1 | 1.2 | Core package scaffolding | — | P with 1.1 |
-| 1 | 1.3 | Virtual environment setup | 1.2 | Sequential |
-| 1 | 1.4 | `list_files` skill | 1.3 | Sequential |
-| 1 | 1.5 | `analyze_file` skill | 1.4 | P with 1.6 |
-| 1 | 1.6 | `generate_report` skill | 1.4 | P with 1.5 |
-| 1 | 1.7 | `SecurityScannerAgent` class | 1.5, 1.6 | Sequential |
-| 1 | 1.8 | Unit tests for skills | 1.7 | Sequential |
-| 2 | 2.1 | CLI package scaffolding | 1.7 | Sequential |
-| 2 | 2.2 | CLI main.py implementation | 2.1 | Sequential |
-| 2 | 2.3 | CLI README | 2.2 | P with 2.4 |
-| 2 | 2.4 | CLI end-to-end verification | 2.2 | Sequential |
-| 3 | 3.1 | Backend package scaffolding | 1.7 | P with 3.2 |
-| 3 | 3.2 | FastAPI server + health endpoint | 1.7 | P with 3.1 |
-| 3 | 3.3 | `/api/scan` + SSE streaming | 3.1, 3.2 | Sequential |
-| 3 | 3.4 | Graceful shutdown handler | 3.3 | Sequential |
-| 4 | 4.1 | Next.js project initialization | — | P with Phase 3 |
-| 4 | 4.2 | `FolderSelector` component | — | P with 4.1 |
-| 4 | 4.3 | `ScanProgress` component | 4.1 | Sequential |
-| 4 | 4.4 | `ResultsPanel` component | 4.1 | P with 4.3 |
-| 4 | 4.5 | Wire up main page | 4.2–4.4 | Sequential |
-| 4 | 4.6 | Frontend E2E verification | 4.5, 3.3 | Sequential |
-| 5 | 5.1 | Electron project init | 4.5 | Sequential |
-| 5 | 5.2 | Electron main.js | 5.1 | P with 5.3 |
-| 5 | 5.3 | Preload script | 5.1 | P with 5.2 |
-| 5 | 5.4 | electron-builder config | 5.2 | Sequential |
-| 5 | 5.5 | Native folder picker IPC | 5.2, 5.3 | Sequential |
-| 5 | 5.6 | Desktop E2E verification | 5.4, 5.5 | Sequential |
-| 6 | 6.1 | Root README | Phase 5 | P |
-| 6 | 6.2 | Package READMEs | Phase 5 | P |
-| 6 | 6.3 | VS Code launch.json | Phase 3 | P |
-| 6 | 6.4 | VS Code tasks.json | Phase 3 | P |
-| 6 | 6.5 | VS Code extensions.json | — | P |
+| Phase | Task | Description | Depends on | Parallel? | Status |
+|-------|------|-------------|-----------|-----------|--------|
+| 1 | 1.1 | Root files (.gitignore, .env.example) | — | P with 1.2 | ✅ |
+| 1 | 1.2 | Core package scaffolding | — | P with 1.1 | ✅ |
+| 1 | 1.3 | Virtual environment setup | 1.2 | Sequential | ✅ |
+| 1 | 1.4 | `list_files` skill | 1.3 | Sequential | ✅ |
+| 1 | 1.5 | `analyze_file` skill | 1.4 | P with 1.6 | ✅ |
+| 1 | 1.6 | `generate_report` skill | 1.4 | P with 1.5 | ✅ |
+| 1 | 1.7 | `SecurityScannerAgent` class | 1.5, 1.6 | Sequential | ✅ |
+| 1 | 1.7b | `AgentSecConfig` configuration system | 1.7 | Sequential | ✅ |
+| 1 | 1.8 | Unit tests for skills | 1.7b | Sequential | |
+| 2 | 2.1 | CLI package scaffolding | 1.7b | Sequential | ✅ |
+| 2 | 2.2 | CLI main.py with config support | 2.1 | Sequential | ✅ |
+| 2 | 2.3 | CLI README | 2.2 | P with 2.4 | ✅ |
+| 2 | 2.4 | CLI end-to-end verification | 2.2 | Sequential | |
+| 3 | 3.1 | Backend package scaffolding | 1.7b | P with 3.2 | |
+| 3 | 3.2 | FastAPI server + health endpoint | 1.7b | P with 3.1 | |
+| 3 | 3.3 | `/api/scan` + SSE streaming | 3.1, 3.2 | Sequential | |
+| 3 | 3.4 | Graceful shutdown handler | 3.3 | Sequential | |
+| 4 | 4.1 | Next.js project initialization | — | P with Phase 3 | |
+| 4 | 4.2 | `FolderSelector` component | — | P with 4.1 | |
+| 4 | 4.3 | `ScanProgress` component | 4.1 | Sequential | |
+| 4 | 4.4 | `ResultsPanel` component | 4.1 | P with 4.3 | |
+| 4 | 4.5 | Wire up main page | 4.2–4.4 | Sequential | |
+| 4 | 4.6 | Frontend E2E verification | 4.5, 3.3 | Sequential | |
+| 5 | 5.1 | Electron project init | 4.5 | Sequential | |
+| 5 | 5.2 | Electron main.js | 5.1 | P with 5.3 | |
+| 5 | 5.3 | Preload script | 5.1 | P with 5.2 | |
+| 5 | 5.4 | electron-builder config | 5.2 | Sequential | |
+| 5 | 5.5 | Native folder picker IPC | 5.2, 5.3 | Sequential | |
+| 5 | 5.6 | Desktop E2E verification | 5.4, 5.5 | Sequential | |
+| 6 | 6.1 | Root README | Phase 5 | P | |
+| 6 | 6.2 | Package READMEs | Phase 5 | P | |
+| 6 | 6.3 | VS Code launch.json | Phase 3 | P | |
+| 6 | 6.4 | VS Code tasks.json | Phase 3 | P | |
+| 6 | 6.5 | VS Code extensions.json | — | P | |
 
 ---
 
@@ -3183,6 +2846,7 @@ agent-framework-azure-ai==1.0.0b260107
 fastapi>=0.104.0
 uvicorn>=0.24.0
 python-dotenv>=1.0.0
+pyyaml>=6.0
 Python 3.12 (recommended), 3.11 (supported), 3.10+ (minimum)
 Next.js 14+
 Electron latest stable

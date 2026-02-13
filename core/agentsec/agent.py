@@ -6,6 +6,7 @@ GitHub Copilot SDK to analyze code for security vulnerabilities.
 Both the CLI and the Desktop app import this class.
 
 Usage:
+    # Using default configuration
     agent = SecurityScannerAgent()
     try:
         await agent.initialize()
@@ -13,6 +14,11 @@ Usage:
         print(result)
     finally:
         await agent.cleanup()
+    
+    # Using custom configuration
+    from agentsec.config import AgentSecConfig
+    config = AgentSecConfig.load("./agentsec.yaml")
+    agent = SecurityScannerAgent(config=config)
 """
 
 import asyncio
@@ -24,28 +30,13 @@ from dotenv import load_dotenv
 
 # Import skills so they are registered with the agent framework
 from agentsec.skills import list_files, analyze_file, generate_report  # noqa: F401
+from agentsec.config import AgentSecConfig
 
 # Load environment variables from .env file at the workspace root
 load_dotenv()
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-
-# System prompt that tells the LLM what it should do
-SYSTEM_MESSAGE = """You are AgentSec, an AI-powered security scanning agent.
-
-Your job is to analyze source code for security vulnerabilities using the
-tools provided to you.
-
-When asked to scan a folder:
-1. Use the list_files tool to get all files in the target folder.
-2. Use the analyze_file tool on each file to check for security issues.
-3. Use the generate_report tool to create a summary of all findings.
-
-Always be thorough and check every file. Provide clear, actionable
-recommendations for any issues you find. Be concise but complete.
-"""
 
 
 class SecurityScannerAgent:
@@ -62,6 +53,7 @@ class SecurityScannerAgent:
         4. cleanup()     — disconnect and free resources
 
     Example:
+        >>> # With default configuration
         >>> agent = SecurityScannerAgent()
         >>> try:
         ...     await agent.initialize()
@@ -69,16 +61,28 @@ class SecurityScannerAgent:
         ...     print(result["status"])
         ... finally:
         ...     await agent.cleanup()
+        
+        >>> # With custom configuration
+        >>> from agentsec.config import AgentSecConfig
+        >>> config = AgentSecConfig.load("./agentsec.yaml")
+        >>> agent = SecurityScannerAgent(config=config)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[AgentSecConfig] = None) -> None:
         """
-        Initialize the agent object.
+        Initialize the agent object with optional configuration.
 
         This does NOT connect to Copilot yet. Call initialize() to connect.
+        
+        Args:
+            config: Optional AgentSecConfig instance. If not provided,
+                    default configuration will be used.
         """
         self.client: Optional[CopilotClient] = None
         self.session = None
+        
+        # Use provided config or create default
+        self.config = config if config is not None else AgentSecConfig()
 
     async def initialize(self) -> None:
         """
@@ -100,14 +104,16 @@ class SecurityScannerAgent:
 
             # Create a session (a conversation context)
             # The system_message tells the LLM what its role is
+            # This uses the system_message from configuration
             self.session = await self.client.create_session(
                 SessionConfig(
                     model="gpt-5",
-                    system_message={"content": SYSTEM_MESSAGE},
+                    system_message={"content": self.config.system_message},
                 )
             )
 
             logger.info("SecurityScannerAgent initialized successfully")
+            logger.debug(f"Using system message: {self.config.system_message[:100]}...")
 
         except FileNotFoundError:
             logger.error(
@@ -150,16 +156,12 @@ class SecurityScannerAgent:
             }
 
         try:
-            # Build the scan prompt
-            scan_prompt = (
-                f"Please perform a security scan of the folder: {folder_path}\n\n"
-                f"Steps:\n"
-                f"1. List all files in {folder_path}\n"
-                f"2. Analyze each file for security issues\n"
-                f"3. Generate a summary report with all findings\n"
-            )
+            # Build the scan prompt using the configured template
+            # The format_prompt method replaces {folder_path} placeholders
+            scan_prompt = self.config.format_prompt(folder_path)
 
             logger.info(f"Starting scan of {folder_path}")
+            logger.debug(f"Using prompt: {scan_prompt[:100]}...")
 
             # Send the prompt and wait for the response
             # We allow up to 2 minutes for the scan to complete

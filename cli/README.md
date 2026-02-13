@@ -52,6 +52,32 @@ This scans all files in `./my_project` and prints a security report to your term
 agentsec scan .
 ```
 
+### Use a custom configuration file
+
+```bash
+agentsec scan ./src --config ./agentsec.yaml
+```
+
+### Override the system message (AI instructions)
+
+```bash
+# Directly in the command
+agentsec scan ./src --system-message "You are a security expert focusing on SQL injection..."
+
+# Or from a file
+agentsec scan ./src --system-message-file ./prompts/my-system.txt
+```
+
+### Override the initial prompt
+
+```bash
+# Directly in the command
+agentsec scan ./src --prompt "Quick scan of {folder_path}. Only HIGH severity issues."
+
+# Or from a file
+agentsec scan ./src --prompt-file ./prompts/my-prompt.txt
+```
+
 ### Show the version number
 
 ```bash
@@ -68,15 +94,56 @@ agentsec --help
 
 ## Configuration
 
-AgentSec uses environment variables for configuration. A `.env.example` file is provided at the workspace root with all available settings.
+AgentSec can be configured in three ways (in order of priority):
 
-To configure:
+1. **CLI arguments** (highest priority) — override everything
+2. **Configuration file** — YAML file with default settings
+3. **Built-in defaults** (lowest priority) — used if nothing else is specified
 
-1. Copy the example file: `cp .env.example .env`
-2. Edit `.env` with your preferred settings
-3. AgentSec will automatically load values from `.env` when running
+### Configuration File
 
-See [`.env.example`](../.env.example) in the project root for all available options.
+Create an `agentsec.yaml` file in your project root:
+
+```yaml
+# System message tells the AI who it is and how to behave
+system_message: |
+  You are AgentSec, a security scanning agent.
+  Focus on finding HIGH severity vulnerabilities.
+
+# Or load from an external file:
+# system_message_file: ./prompts/system.txt
+
+# Initial prompt template (use {folder_path} as placeholder)
+initial_prompt: |
+  Scan {folder_path} for security issues.
+  Generate a detailed report.
+
+# Or load from an external file:
+# initial_prompt_file: ./prompts/scan.txt
+```
+
+AgentSec automatically searches for config files in:
+- Current directory: `agentsec.yaml`, `agentsec.yml`, `.agentsec.yaml`, `.agentsec.yml`
+- Home directory
+- `~/.config/agentsec/`
+
+See [`agentsec.example.yaml`](../agentsec.example.yaml) for a full example with comments.
+
+### CLI Override Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--config FILE` | `-c` | Path to YAML config file |
+| `--system-message TEXT` | `-s` | Override system message |
+| `--system-message-file FILE` | `-sf` | Load system message from file |
+| `--prompt TEXT` | `-p` | Override initial prompt template |
+| `--prompt-file FILE` | `-pf` | Load initial prompt from file |
+
+**Note:** `--system-message` and `--system-message-file` are mutually exclusive. Same for `--prompt` and `--prompt-file`.
+
+### Environment Variables
+
+AgentSec also loads values from a `.env` file at the workspace root. See [`.env.example`](../.env.example) for available options.
 
 ---
 
