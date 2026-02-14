@@ -132,10 +132,9 @@ def create_progress_display():
 
         elif event.type == ProgressEventType.HEARTBEAT:
             # Print heartbeat to show the scan is still running
+            # (omit progress bar as it's often misleading during parallel scans)
             if event.total_files > 0:
-                percent = (event.files_scanned / event.total_files) * 100
-                progress_bar = create_progress_bar(percent)
-                line = f"  {spinner} {progress_bar} {event.files_scanned}/{event.total_files} files ({time_str})"
+                line = f"  {spinner} {event.files_scanned}/{event.total_files} files ({time_str})"
             else:
                 line = f"  {spinner} {event.files_scanned} files scanned ({time_str})"
 
@@ -152,6 +151,31 @@ def create_progress_display():
 
         elif event.type == ProgressEventType.ERROR:
             print(f"\n  ❌ Error: {event.message}")
+
+        # ── Parallel orchestration events ────────────────────────
+        elif event.type == ProgressEventType.PARALLEL_PLAN_READY:
+            print(f"  📋 {event.message}")
+            print()
+
+        elif event.type == ProgressEventType.SUB_AGENT_STARTED:
+            print(f"  🔍 {event.message}")
+
+        elif event.type == ProgressEventType.SUB_AGENT_FINISHED:
+            # Choose icon based on outcome
+            if "clean" in event.message or "0 findings" in event.message:
+                icon = "✅"
+            elif "error" in event.message or "timeout" in event.message:
+                icon = "❌"
+            else:
+                icon = "⚠️"
+            print(f"  {icon} {event.message}")
+
+        elif event.type == ProgressEventType.SYNTHESIS_STARTED:
+            print(f"\n  📝 {event.message}")
+
+        elif event.type == ProgressEventType.SYNTHESIS_FINISHED:
+            print(f"  📊 {event.message}")
+            print()
 
     return display_progress
 
@@ -415,6 +439,8 @@ async def run_scan(
     system_message_file: Optional[str] = None,
     prompt: Optional[str] = None,
     prompt_file: Optional[str] = None,
+    parallel: bool = False,
+    max_concurrent: int = 3,
 ) -> int:
     """
     Execute a security scan on the given folder.
@@ -434,6 +460,8 @@ async def run_scan(
         system_message_file: Path to file containing system message
         prompt: Override initial prompt text
         prompt_file: Path to file containing initial prompt
+        parallel: If True, use parallel sub-agent scanning mode
+        max_concurrent: Maximum concurrent sub-agents (only for parallel mode)
 
     Returns:
         Exit code: 0 for success, 1 for error, 2 for timeout
@@ -510,16 +538,30 @@ async def run_scan(
 
         # Step 8: Run the scan with progress tracking
         progress_tracker.start_scan(str(folder_path))
-        result = await agent.scan(str(folder_path))
+
+        if parallel:
+            # Parallel mode: use sub-agent orchestration
+            print(f"🔀 Parallel mode: up to {max_concurrent} concurrent scanners")
+            result = await agent.scan_parallel(
+                str(folder_path),
+                max_concurrent=max_concurrent,
+            )
+        else:
+            # Serial mode: single LLM session (original behaviour)
+            result = await agent.scan(str(folder_path))
 
         # Step 8b: Update progress tracker with issue count from
         # the agent's response (but keep the file count from the tracker
         # since it accurately reflects what was actually scanned)
         if result["status"] == "success" and result.get("result"):
             actual_counts = _parse_result_counts(result["result"])
-            if actual_counts and "issues" in actual_counts:
-                # Only update issues count, not files count
+            if actual_counts:
+                # Update both file and issue counts from the agent's
+                # response.  _parse_result_counts returns None for any
+                # key it could not extract, and update_counts skips
+                # None values, so this is safe for partial matches.
                 progress_tracker.update_counts(
+                    files_scanned=actual_counts.get("files"),
                     issues_found=actual_counts.get("issues"),
                 )
 
@@ -649,6 +691,28 @@ def main() -> None:
             "tool calls, and internal state for troubleshooting."
         ),
     )
+
+    # Parallel scanning mode
+    scan_parser.add_argument(
+        "--parallel",
+        action="store_true",
+        default=False,
+        help=(
+            "Run security scanners in parallel using sub-agent sessions. "
+            "Each available scanner gets its own session that runs "
+            "concurrently.  Results are synthesised into one report."
+        ),
+    )
+    scan_parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=3,
+        metavar="N",
+        help=(
+            "Maximum number of scanner sub-agents running at the same "
+            "time (only used with --parallel).  Default is 3."
+        ),
+    )
     
     # Configuration file option
     scan_parser.add_argument(
@@ -719,6 +783,8 @@ def main() -> None:
                 system_message_file=args.system_message_file,
                 prompt=args.prompt,
                 prompt_file=args.prompt_file,
+                parallel=args.parallel,
+                max_concurrent=args.max_concurrent,
             )
         )
 

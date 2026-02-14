@@ -113,3 +113,21 @@
 #   For shell scripts: use shellcheck-security-scan
 #   For all files: use graudit-security-scan with secrets database
 #   Compile all findings into one report.
+
+
+# Parallel Scanning
+# =================
+# These settings only apply when using the --parallel CLI flag
+# (or calling agent.scan_parallel() programmatically).
+#
+# Parallel mode runs multiple scanners concurrently as sub-agents
+# and synthesises the results into a single report.
+#
+# Maximum number of scanner sub-agents running at the same time.
+# Higher values = faster scans but more API load.  Default is 3.
+#
+# max_concurrent: 3
+#
+# CLI usage examples:
+#   agentsec scan ./src --parallel
+#   agentsec scan ./src --parallel --max-concurrent 5

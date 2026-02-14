@@ -54,6 +54,12 @@ agentsec scan ./src --config ./agentsec.yaml
 
 # Override the system message
 agentsec scan ./src --system-message-file ./custom-prompt.txt
+
+# Run scanners in parallel for faster results
+agentsec scan ./test-scan --parallel
+
+# Parallel mode with up to 5 concurrent scanners
+agentsec scan ./test-scan --parallel --max-concurrent 5
 ```
 
 ## Setup Details
@@ -88,11 +94,45 @@ AgentSec uses **Copilot CLI built-in tools** (`bash`, `skill`, `view`) to invoke
 3. **Manual Inspection** — Uses `view` to read suspicious files for deeper LLM analysis
 4. **Report Generation** — Compiles all findings into a structured Markdown report with severity levels, line numbers, code snippets, and remediation advice
 
+### Parallel Scanning Mode
+
+By default, AgentSec runs all scanners sequentially in a single LLM session. With `--parallel`, it uses a **sub-agent orchestration** pattern that runs multiple scanners concurrently for faster results:
+
+```bash
+# Run available scanners in parallel (default: 3 concurrent)
+agentsec scan ./my_project --parallel
+
+# Allow up to 5 scanners at once
+agentsec scan ./my_project --parallel --max-concurrent 5
+```
+
+**How parallel mode works** (3-phase workflow):
+
+1. **Discovery** — Walks the target folder, classifies files by type, determines which scanners are relevant and available, builds a scan plan
+2. **Parallel Scan** — Spawns one sub-agent session per relevant scanner. Each session focuses on exactly one scanner tool. Sessions run concurrently via `asyncio.gather` with a semaphore to cap parallelism
+3. **Synthesis** — Feeds all sub-agent findings into a synthesis session that deduplicates, normalizes severity, and compiles a single consolidated Markdown report
+
+Example parallel progress output:
+```
+📋 Scan plan: running bandit, graudit, trivy (skipped: eslint, shellcheck — no relevant files)
+
+🔍 Sub-agent started: bandit
+🔍 Sub-agent started: graudit
+🔍 Sub-agent started: trivy
+⚠️  Sub-agent finished: bandit — 3 findings (12s)
+✅ Sub-agent finished: graudit — 0 findings (8s)
+⚠️  Sub-agent finished: trivy — 1 findings (15s)
+
+📝 Synthesising findings from 3 scanners...
+📊 Synthesis complete
+```
+
 ### Reliability Features
 
 - **Stall detection**: Monitors tool activity every 5 seconds; sends nudge messages if the LLM's tool calls stall for 30+ seconds
 - **Configurable timeout**: Default 300s scan timeout; partial results returned on timeout instead of discarding all work
 - **Safety guardrails**: System message prevents execution of scanned code, blocks dangerous commands, and defends against prompt injection
+- **Per-sub-agent isolation** (parallel mode): Each sub-agent runs in its own session; failures in one scanner don't affect others
 
 ## Progress Tracking
 
@@ -135,6 +175,9 @@ See [agentsec.example.yaml](agentsec.example.yaml) for a full example with comme
 | `--system-message-file FILE` | `-sf` | Load system message from file |
 | `--prompt TEXT` | `-p` | Override initial prompt template |
 | `--prompt-file FILE` | `-pf` | Load initial prompt from file |
+| `--parallel` | | Run scanners concurrently as sub-agents |
+| `--max-concurrent N` | | Max parallel scanners (default 3, requires `--parallel`) |
+| `--verbose` | `-v` | Enable debug logging |
 
 ## Documentation
 
@@ -156,6 +199,33 @@ The agent also has fallback `@tool` skills (`list_files`, `analyze_file`, `gener
 A **directive system message** guides the LLM through a structured scanning workflow with safety guardrails. **Stall detection** monitors tool activity and sends nudge messages if the LLM becomes inactive.
 
 The agent is implemented in [core/agentsec/agent.py](core/agentsec/agent.py) and shared by both the CLI and Desktop app.
+
+### Parallel Sub-Agent Architecture
+
+When `--parallel` is used, the `ParallelScanOrchestrator` (in [core/agentsec/orchestrator.py](core/agentsec/orchestrator.py)) manages the workflow:
+
+```
+                ┌──────────────────┐
+                │  Discovery Phase │   Pure Python — classify files,
+                │  (no LLM calls)  │   pick relevant scanners
+                └────────┬─────────┘
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+       ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
+       │ bandit  │ │ graudit │ │  trivy  │   Concurrent SDK sessions
+       │ session │ │ session │ │ session │   (capped by semaphore)
+       └────┬────┘ └────┬────┘ └────┬────┘
+            │            │            │
+            └────────────┼────────────┘
+                         │
+                ┌────────▼─────────┐
+                │ Synthesis Phase  │   Single SDK session —
+                │ (one LLM call)   │   dedupe & compile report
+                └──────────────────┘
+```
+
+Each sub-agent session is isolated: a failure or timeout in one scanner does not affect others. The semaphore (`--max-concurrent`) prevents overloading the Copilot API.
 
 ## External Security Tools (Skill Discovery)
 

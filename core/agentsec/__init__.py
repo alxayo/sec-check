@@ -26,8 +26,10 @@ from agentsec.progress import (
 
 try:
     from agentsec.agent import SecurityScannerAgent
+    from agentsec.orchestrator import ParallelScanOrchestrator
     __all__ = [
         "SecurityScannerAgent",
+        "ParallelScanOrchestrator",
         "AgentSecConfig",
         "discover_all_skills",
         "get_skill_summary",

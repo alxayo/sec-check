@@ -11,6 +11,7 @@ agentsec/
 │   └── agentsec/
 │       ├── agent.py      # SecurityScannerAgent class
 │       ├── config.py     # AgentSecConfig for customization
+│       ├── orchestrator.py # ParallelScanOrchestrator for concurrent scanning
 │       ├── progress.py   # ProgressTracker for real-time feedback
 │       └── skills.py     # @tool decorated skill functions
 ├── cli/                  # Command-line interface (Python)
@@ -467,6 +468,7 @@ All Python code uses `.vscode/python-copilot-sdk.instructions.md` for detailed a
 | `agentsec.example.yaml` | Example configuration file with documentation |
 | `core/agentsec/agent.py` | SecurityScannerAgent entry point (stall detection, nudge system) |
 | `core/agentsec/config.py` | AgentSecConfig + directive system message + safety guardrails |
+| `core/agentsec/orchestrator.py` | ParallelScanOrchestrator for concurrent sub-agent scanning |
 | `core/agentsec/progress.py` | ProgressTracker for real-time scan feedback |
 | `core/agentsec/skills.py` | @tool skill definitions |
 | `cli/agentsec_cli/main.py` | CLI command routing with config options |
@@ -508,6 +510,12 @@ A: Stall detection monitors tool activity every 5s. If no tool activity for 30s,
 
 **Q: How do I configure the agent via command line?**  
 A: Use CLI options: `--config`, `--system-message`, `--system-message-file`, `--prompt`, `--prompt-file`
+
+**Q: How do I run scanners in parallel?**  
+A: Use `agentsec scan <folder> --parallel`. Control concurrency with `--max-concurrent N` (default 3). Programmatically, call `agent.scan_parallel(folder, max_concurrent=3)`.
+
+**Q: How does parallel scanning work?**  
+A: `ParallelScanOrchestrator` in `core/agentsec/orchestrator.py` runs a 3-phase workflow: (1) Discovery — classify files and pick relevant scanners, (2) Parallel Scan — one concurrent SDK session per scanner via `asyncio.gather` + Semaphore, (3) Synthesis — one SDK session compiles a deduplicated report.
 
 **Q: How do I add a new scanning capability?**  
 A: Create async `@tool` function in `core/agentsec/skills.py`

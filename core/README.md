@@ -12,6 +12,7 @@ pip install -e ./core
 
 - `agentsec/agent.py` — `SecurityScannerAgent` class (main entry point, stall detection, nudge system)
 - `agentsec/config.py` — `AgentSecConfig` class with directive system message and safety guardrails
+- `agentsec/orchestrator.py` — `ParallelScanOrchestrator` class for concurrent sub-agent scanning
 - `agentsec/progress.py` — `ProgressTracker` class for real-time scan feedback
 - `agentsec/skill_discovery.py` — Dynamic discovery of Copilot CLI agentic skills and tool availability checking
 - `agentsec/skills.py` — `@tool` skill functions (list_files, analyze_file, generate_report)
@@ -105,6 +106,47 @@ finally:
     await agent.cleanup()
 ```
 
+### Parallel Scanning
+
+Use `scan_parallel()` to run multiple scanners concurrently:
+
+```python
+from agentsec.agent import SecurityScannerAgent
+
+agent = SecurityScannerAgent()
+
+try:
+    await agent.initialize()
+
+    # Run scanners in parallel (max 3 at once)
+    result = await agent.scan_parallel(
+        "./my-project",
+        max_concurrent=3,
+        timeout=300.0,
+    )
+    print(result["result"])
+finally:
+    await agent.cleanup()
+```
+
+The parallel scan uses `ParallelScanOrchestrator` under the hood:
+
+```python
+from agentsec.orchestrator import ParallelScanOrchestrator
+
+orchestrator = ParallelScanOrchestrator(
+    client=copilot_client,
+    config=agent_config,
+    max_concurrent=3,
+)
+result = await orchestrator.run("./my_project", timeout=300.0)
+```
+
+**3-phase workflow:**
+1. **Discovery** — Walks the folder, classifies files, picks relevant scanners, builds a `ScanPlan`
+2. **Parallel Scan** — Spawns one sub-agent session per scanner via `asyncio.gather` with a semaphore
+3. **Synthesis** — Compiles all `SubAgentResult` objects into a single deduplicated report
+
 ## Progress Tracking
 
 The core package provides a `ProgressTracker` class for real-time scan feedback:
@@ -151,6 +193,11 @@ set_global_tracker(None)
 | `SCAN_FINISHED` | Scan complete with final summary |
 | `WARNING` | Non-fatal issue during scan |
 | `ERROR` | Serious problem during scan |
+| `PARALLEL_PLAN_READY` | Parallel scan plan created (scanners selected/skipped) |
+| `SUB_AGENT_STARTED` | A sub-agent scanner session has started |
+| `SUB_AGENT_FINISHED` | A sub-agent scanner session has finished |
+| `SYNTHESIS_STARTED` | Synthesis phase begun (compiling sub-agent results) |
+| `SYNTHESIS_FINISHED` | Synthesis phase complete |
 
 ## Skill Discovery
 

@@ -55,6 +55,13 @@ class ProgressEventType(Enum):
     # Periodic heartbeat to show the scan is still running
     HEARTBEAT = "heartbeat"
 
+    # Parallel orchestration events
+    PARALLEL_PLAN_READY = "parallel_plan_ready"
+    SUB_AGENT_STARTED = "sub_agent_started"
+    SUB_AGENT_FINISHED = "sub_agent_finished"
+    SYNTHESIS_STARTED = "synthesis_started"
+    SYNTHESIS_FINISHED = "synthesis_finished"
+
     # Error or warning during scan
     WARNING = "warning"
     ERROR = "error"
@@ -386,6 +393,107 @@ class ProgressTracker:
             issues_found=total_issues,
             elapsed_seconds=self._get_elapsed(),
             percent_complete=self._get_percent(),
+        ))
+
+    # ── Parallel orchestration methods ────────────────────────────
+
+    def emit_parallel_plan(
+        self,
+        scanners: list,
+        skipped: list = None,
+    ) -> None:
+        """
+        Announce the parallel scan plan.
+
+        Called by the orchestrator after the discovery phase to report
+        which scanners will run and which were skipped.
+
+        Args:
+            scanners: List of scanner skill names to run.
+            skipped:  List of skipped scanner descriptions.
+        """
+        scanner_list = ", ".join(scanners)
+        message = (
+            f"Scan plan: {len(scanners)} scanners selected — {scanner_list}"
+        )
+        self._emit(ProgressEvent(
+            type=ProgressEventType.PARALLEL_PLAN_READY,
+            message=message,
+            elapsed_seconds=self._get_elapsed(),
+        ))
+
+    def start_sub_agent(self, scanner_name: str) -> None:
+        """
+        Mark the start of a sub-agent scanner session.
+
+        Args:
+            scanner_name: Name of the scanner skill being run.
+        """
+        self._emit(ProgressEvent(
+            type=ProgressEventType.SUB_AGENT_STARTED,
+            message=f"Starting sub-agent: {scanner_name}",
+            current_file=scanner_name,
+            elapsed_seconds=self._get_elapsed(),
+        ))
+
+    def finish_sub_agent(
+        self,
+        scanner_name: str,
+        status: str = "success",
+        findings_count: int = 0,
+        elapsed_seconds: float = 0.0,
+    ) -> None:
+        """
+        Mark the completion of a sub-agent scanner session.
+
+        Args:
+            scanner_name:    Name of the scanner skill.
+            status:          "success", "error", or "timeout".
+            findings_count:  Number of findings reported.
+            elapsed_seconds: Wall-clock time the sub-agent ran.
+        """
+        if status == "success" and findings_count == 0:
+            status_label = "clean"
+        elif status == "success":
+            status_label = f"{findings_count} findings"
+        else:
+            status_label = status
+
+        with self._lock:
+            self._issues_found += findings_count
+
+        self._emit(ProgressEvent(
+            type=ProgressEventType.SUB_AGENT_FINISHED,
+            message=(
+                f"{scanner_name}: {status_label} "
+                f"({elapsed_seconds:.0f}s)"
+            ),
+            current_file=scanner_name,
+            issues_found=findings_count,
+            elapsed_seconds=self._get_elapsed(),
+        ))
+
+    def start_synthesis(self, scanner_count: int) -> None:
+        """
+        Mark the start of the synthesis phase.
+
+        Args:
+            scanner_count: Number of sub-agent results being synthesised.
+        """
+        self._emit(ProgressEvent(
+            type=ProgressEventType.SYNTHESIS_STARTED,
+            message=(
+                f"Synthesising results from {scanner_count} scanners…"
+            ),
+            elapsed_seconds=self._get_elapsed(),
+        ))
+
+    def finish_synthesis(self) -> None:
+        """Mark the completion of the synthesis phase."""
+        self._emit(ProgressEvent(
+            type=ProgressEventType.SYNTHESIS_FINISHED,
+            message="Report compiled",
+            elapsed_seconds=self._get_elapsed(),
         ))
 
     def emit_warning(self, message: str) -> None:

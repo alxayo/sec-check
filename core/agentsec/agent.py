@@ -641,6 +641,90 @@ class SecurityScannerAgent:
                 "error": str(error),
             }
 
+    async def scan_parallel(
+        self,
+        folder_path: str,
+        timeout: Optional[float] = None,
+        max_concurrent: int = 3,
+    ) -> dict:
+        """
+        Run a security scan using parallel sub-agent sessions.
+
+        Instead of a single LLM session that calls scanners one-by-one,
+        this method uses the ParallelScanOrchestrator to:
+
+        1. **Discover** which scanners are relevant for the folder (Python,
+           no LLM call).
+        2. **Run** N sub-agent sessions in parallel, each executing one
+           scanner via the ``skill`` or ``bash`` tool.
+        3. **Synthesise** all sub-agent findings into a single consolidated
+           Markdown report via a synthesis LLM session.
+
+        The method requires only the CopilotClient to be started (via
+        ``initialize()``) — the orchestrator creates its own sessions.
+
+        Args:
+            folder_path:    Path to the folder to scan.
+            timeout:        Maximum wall-clock seconds for the entire scan
+                            (discovery + parallel scan + synthesis).
+                            Defaults to DEFAULT_SCAN_TIMEOUT_SECONDS (300 s).
+            max_concurrent: Maximum sub-agent sessions running at the same
+                            time.  Default is 3 to stay within typical API
+                            rate limits.
+
+        Returns:
+            A dictionary with:
+            - "status": "success", "timeout", or "error"
+            - "result": Consolidated Markdown report (if successful)
+            - "error":  Error description (if failed)
+
+        Example:
+            >>> result = await agent.scan_parallel("./src", max_concurrent=4)
+            >>> if result["status"] == "success":
+            ...     print(result["result"])
+        """
+        # The parallel scan only needs the client, not the main session.
+        if not self.client:
+            return {
+                "status": "error",
+                "error": "Agent not initialized. Call initialize() first.",
+            }
+
+        if timeout is None:
+            timeout = DEFAULT_SCAN_TIMEOUT_SECONDS
+
+        try:
+            # Import here to avoid circular imports and keep the
+            # orchestrator as an optional component.
+            from agentsec.orchestrator import ParallelScanOrchestrator
+
+            orchestrator = ParallelScanOrchestrator(
+                client=self.client,
+                config=self.config,
+                max_concurrent=max_concurrent,
+            )
+
+            logger.info(
+                f"Starting parallel scan of {folder_path} "
+                f"(max_concurrent={max_concurrent}, timeout={timeout}s)"
+            )
+
+            result = await orchestrator.run(
+                folder_path=folder_path,
+                timeout=timeout,
+            )
+
+            return result
+
+        except Exception as error:
+            logger.error(
+                f"Parallel scan failed: {error}", exc_info=True
+            )
+            return {
+                "status": "error",
+                "error": str(error),
+            }
+
     async def cleanup(self) -> None:
         """
         Disconnect from Copilot and free all resources.

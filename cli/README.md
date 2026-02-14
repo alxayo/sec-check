@@ -46,6 +46,43 @@ agentsec scan ./my_project
 
 This scans all files in `./my_project` and prints a security report to your terminal with real-time progress indicators.
 
+### Parallel Scanning Mode
+
+Run multiple scanners concurrently for faster results:
+
+```bash
+# Run relevant scanners in parallel (default: 3 concurrent)
+agentsec scan ./my_project --parallel
+
+# Allow up to 5 concurrent scanner sessions
+agentsec scan ./my_project --parallel --max-concurrent 5
+```
+
+In parallel mode, AgentSec follows a 3-phase workflow:
+
+1. **Discovery** — Classifies files and determines which scanners are relevant
+2. **Parallel Scan** — Spawns one sub-agent session per scanner, all running concurrently
+3. **Synthesis** — Deduplicates and compiles all findings into a single report
+
+Parallel progress output:
+```
+🔀 Parallel mode: up to 3 concurrent scanners
+
+📋 Scan plan: running bandit, graudit, trivy (skipped: eslint, shellcheck)
+
+🔍 Sub-agent started: bandit
+🔍 Sub-agent started: graudit
+🔍 Sub-agent started: trivy
+⚠️  Sub-agent finished: bandit — 3 findings (12s)
+✅ Sub-agent finished: graudit — 0 findings (8s)
+⚠️  Sub-agent finished: trivy — 1 findings (15s)
+
+📝 Synthesising findings from 3 scanners...
+📊 Synthesis complete
+
+✅ Scan complete: 4 issues found (18s)
+```
+
 ### Progress Display
 
 When scanning, you'll see real-time progress:
@@ -185,6 +222,9 @@ See [`agentsec.example.yaml`](../agentsec.example.yaml) for a full example with 
 | `--system-message-file FILE` | `-sf` | Load system message from file |
 | `--prompt TEXT` | `-p` | Override initial prompt template |
 | `--prompt-file FILE` | `-pf` | Load initial prompt from file |
+| `--parallel` | | Run scanners concurrently as sub-agents |
+| `--max-concurrent N` | | Max parallel scanners (default 3, needs `--parallel`) |
+| `--verbose` | `-v` | Enable debug logging for troubleshooting |
 
 **Note:** `--system-message` and `--system-message-file` are mutually exclusive. Same for `--prompt` and `--prompt-file`.
 
@@ -265,8 +305,20 @@ agentsec scan ./express-server
 # Scan the current directory
 agentsec scan .
 
+# Parallel scan for faster results
+agentsec scan ./my-flask-app --parallel
+
+# Parallel with higher concurrency
+agentsec scan ./large-project --parallel --max-concurrent 5
+
+# Parallel with verbose output for debugging
+agentsec scan ./my-flask-app --parallel -v
+
 # Use in a CI script
 agentsec scan ./src || exit 1
+
+# Parallel scan in CI
+agentsec scan ./src --parallel || exit 1
 ```
 
 ---
