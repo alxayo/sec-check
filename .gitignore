@@ -2,14 +2,19 @@
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Thumbnails
 ._*
 
+# Windows
+Thumbs.db
+
 # Python
+venv/
+.venv
+ENV/
+env/
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 build/
@@ -28,19 +33,24 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.pytest_cache/
 
-# Virtual environments
-venv/
-ENV/
-env/
-.venv
+# Node / Frontend
+node_modules/
+.next/
+out/
+
+# Electron
+release/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# Environment
+.env
 
 # Logs
 *.log
@@ -48,3 +58,4 @@ env/
 # Temporary files
 *.tmp
 .temp/
+/tmp/agentsec-port.txt
