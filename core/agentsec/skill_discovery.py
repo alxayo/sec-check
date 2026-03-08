@@ -433,10 +433,29 @@ def _discover_skills_in_directory(skills_dir: Path, source_label: str) -> List[d
         tool_name = SKILL_TO_TOOL_MAP.get(entry.name)
         if tool_name is None:
             tool_name = _derive_tool_name(entry.name)
+            logger.info(
+                f"Skill '{skill_name}' not in SCANNER_REGISTRY, "
+                f"derived tool name: '{tool_name}'"
+            )
+        else:
+            logger.info(
+                f"Skill '{skill_name}' mapped to tool '{tool_name}' via SCANNER_REGISTRY"
+            )
 
         # Check if the tool is available on the system
         tool_path = shutil.which(tool_name)
         tool_available = tool_path is not None
+
+        if tool_available:
+            logger.info(
+                f"  ✓ Tool '{tool_name}' found at: {tool_path}"
+            )
+        else:
+            logger.warning(
+                f"  ✗ Tool '{tool_name}' NOT found on PATH. "
+                f"To fix: install '{tool_name}' or add it to PATH. "
+                f"Searched via: shutil.which('{tool_name}')"
+            )
 
         skill_info = {
             "name": skill_name,

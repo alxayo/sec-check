@@ -566,6 +566,7 @@ async def run_scan(
     timeout: Optional[int] = None,
     model: Optional[str] = None,
     no_llm_analysis: bool = False,
+    scanners: Optional[list] = None,
 ) -> int:
     """
     Execute a security scan on the given folder.
@@ -631,6 +632,7 @@ async def run_scan(
             initial_prompt_file=prompt_file,
             model=model,
             enable_llm_analysis=False if no_llm_analysis else None,
+            scanners=scanners,
         )
     except FileNotFoundError as error:
         print(f"Error: {error}", file=sys.stderr)
@@ -866,6 +868,36 @@ def main() -> None:
             "time (only used with --parallel).  Default is 3."
         ),
     )
+
+    # Scanner selection (whitelist / blacklist)
+    scanner_group = scan_parser.add_mutually_exclusive_group()
+    scanner_group.add_argument(
+        "--scanners",
+        dest="scanners",
+        metavar="LIST",
+        help=(
+            "Comma-separated list of scanner names to use "
+            "(e.g. bandit-security-scan,trivy-security-scan). "
+            "Only these scanners will run.  Use --list-scanners to "
+            "see all available names."
+        ),
+    )
+    scanner_group.add_argument(
+        "--skip-scanners",
+        dest="skip_scanners",
+        metavar="LIST",
+        help=(
+            "Comma-separated list of scanner names to EXCLUDE "
+            "(e.g. graudit-security-scan). All other relevant "
+            "scanners will still run."
+        ),
+    )
+    scan_parser.add_argument(
+        "--list-scanners",
+        action="store_true",
+        default=False,
+        help="Print all known scanner names and exit.",
+    )
     scan_parser.add_argument(
         "--no-llm-analysis",
         action="store_true",
@@ -959,6 +991,40 @@ def main() -> None:
 
     # Route to the correct command
     if args.command == "scan":
+        # Handle --list-scanners: print known scanners and exit
+        if getattr(args, "list_scanners", False):
+            try:
+                from agentsec.skill_discovery import SCANNER_REGISTRY
+                print("Known scanner names:")
+                for name in sorted(SCANNER_REGISTRY.keys()):
+                    info = SCANNER_REGISTRY[name]
+                    print(f"  {name}  ({info.get('tool', 'N/A')})")
+            except ImportError:
+                print("Error: agentsec-core not installed", file=sys.stderr)
+            sys.exit(0)
+
+        # Parse --scanners / --skip-scanners into a list
+        scanners_list = None
+        if getattr(args, "scanners", None):
+            scanners_list = [
+                s.strip() for s in args.scanners.split(",") if s.strip()
+            ]
+        elif getattr(args, "skip_scanners", None):
+            # For --skip-scanners we need the full registry to compute
+            # the inverse set.  Import it here (lazy).
+            try:
+                from agentsec.skill_discovery import SCANNER_REGISTRY
+                skip_set = {
+                    s.strip() for s in args.skip_scanners.split(",")
+                    if s.strip()
+                }
+                scanners_list = [
+                    name for name in SCANNER_REGISTRY.keys()
+                    if name not in skip_set
+                ]
+            except ImportError:
+                pass  # Will fail later with a clearer message
+
         # Configure logging based on --verbose flag
         configure_logging(verbose=args.verbose)
 
@@ -975,6 +1041,7 @@ def main() -> None:
                 timeout=args.timeout,
                 model=args.model,
                 no_llm_analysis=args.no_llm_analysis,
+                scanners=scanners_list,
             )
         )
 

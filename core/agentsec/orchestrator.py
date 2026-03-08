@@ -45,7 +45,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from copilot import SessionConfig, MessageOptions
 
@@ -67,6 +67,12 @@ from agentsec.skill_discovery import (
 from agentsec.tool_health import (
     OnToolStuckCallback,
 )
+
+# Type for the output streaming callback.
+# Receives (channel_name, text_line) — channel_name identifies which
+# Output Channel to append the text to (e.g. "Discovery",
+# "bandit-security-scan", "LLM Analysis", "Synthesis").
+OutputCallback = Optional[Callable[[str, str], None]]
 
 # Set up logging for this module
 logger = logging.getLogger(__name__)
@@ -239,6 +245,13 @@ SYNTHESIS_SYSTEM_MESSAGE = """You are a security report synthesizer for AgentSec
 
 You will receive findings from multiple security scanners that ran **in parallel** on a codebase.  Your job is to compile them into ONE consolidated, professional Markdown security report.
 
+## ⛔ CRITICAL OUTPUT RULE
+
+You MUST output the COMPLETE report **directly in your response text**.  
+Do NOT use `bash`, `skill`, or any tool to write the report to a file.  
+Do NOT save the report to `/tmp/`, the working directory, or any other path.  
+The ONLY output is your response message containing the full Markdown report.
+
 ## Instructions
 
 1. **Deduplicate** — If multiple scanners found the same issue in the same file and line, merge them into a single finding and note it was confirmed by multiple tools.
@@ -248,6 +261,8 @@ You will receive findings from multiple security scanners that ran **in parallel
 
 ## Report Structure
 
+Produce the report below exactly in your response.  Every finding MUST include the file path and line number in the format `path/to/file.ext:LINE` so automated parsers can extract them.
+
 # AgentSec Parallel Security Scan Report
 
 ## Executive Summary
@@ -256,10 +271,12 @@ You will receive findings from multiple security scanners that ran **in parallel
 - Key areas of concern
 
 ## Critical & High Findings
-[Detailed findings with file, line, code snippet, remediation]
+For each finding use this format:
+- **[SEVERITY] Title** — `path/to/file.ext:LINE`
+  Description and remediation.  Code snippet if relevant.
 
 ## Medium & Low Findings
-[Detailed findings]
+[Same format as above]
 
 ## Scanner Coverage
 | Scanner | Status | Findings Count |
@@ -268,9 +285,6 @@ You will receive findings from multiple security scanners that ran **in parallel
 ## Remediation Checklist
 - [ ] Priority 1: …
 - [ ] Priority 2: …
-
-## Detailed Per-File Analysis
-[Grouped by file, all findings]
 
 Be thorough but avoid redundancy.
 """
@@ -417,6 +431,8 @@ class ParallelScanOrchestrator:
         client,
         config,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+        on_output: OutputCallback = None,
+        scanner_whitelist: Optional[List[str]] = None,
     ) -> None:
         """
         Create a new parallel scan orchestrator.
@@ -426,11 +442,35 @@ class ParallelScanOrchestrator:
             config:         AgentSecConfig with system message / prompt settings.
             max_concurrent: Maximum sub-agent sessions running at the same time.
                             Default is 3 to stay within typical API rate limits.
+            on_output:      Optional callback (channel_name, text) for streaming
+                            per-phase output to the VS Code extension.
+            scanner_whitelist: Optional list of scanner names to include.
+                            When set, only these scanners will be used (after
+                            availability and relevance checks).  None means
+                            "use all relevant and available scanners".
         """
         self._client = client
         self._config = config
         self._max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._on_output = on_output
+        self._scanner_whitelist = scanner_whitelist
+
+    # ── Output streaming helper ──────────────────────────────────────
+
+    def _emit_output(self, channel: str, text: str) -> None:
+        """
+        Send a line of output text to the VS Code extension.
+
+        Args:
+            channel: Output channel name (e.g. "Discovery", scanner name).
+            text:    The text line to append.
+        """
+        if self._on_output:
+            try:
+                self._on_output(channel, text)
+            except Exception:
+                pass
 
     # ── Public entry point ───────────────────────────────────────────
 
@@ -682,6 +722,22 @@ class ParallelScanOrchestrator:
             f"extensions: {dict(file_extensions)}"
         )
 
+        # Stream discovery output
+        self._emit_output(
+            "Discovery",
+            f"Scanning folder: {folder_path}\n"
+        )
+        self._emit_output(
+            "Discovery",
+            f"Found {total_files} files\n"
+        )
+        if file_extensions:
+            ext_summary = ", ".join(
+                f"{ext}: {count}" for ext, count in
+                sorted(file_extensions.items(), key=lambda x: -x[1])
+            )
+            self._emit_output("Discovery", f"File types: {ext_summary}\n")
+
         # Step 2: Discover available Copilot CLI skills
         skills = discover_all_skills(project_root=folder_path)
 
@@ -696,6 +752,11 @@ class ParallelScanOrchestrator:
             f"Available skills: {list(available_skills.keys())}"
         )
 
+        self._emit_output(
+            "Discovery",
+            f"Available scanner skills: {len(available_skills)}\n"
+        )
+
         # Step 3: Determine which scanners are relevant AND available
         scanners_to_run: List[str] = []
         scanner_tool_map: Dict[str, str] = {}
@@ -706,6 +767,10 @@ class ParallelScanOrchestrator:
             if scanner_name not in available_skills:
                 skipped_scanners.append(
                     f"{scanner_name} (tool not installed)"
+                )
+                self._emit_output(
+                    "Discovery",
+                    f"  ✗ {scanner_name} — tool not installed\n"
                 )
                 continue
 
@@ -720,6 +785,10 @@ class ParallelScanOrchestrator:
                 skipped_scanners.append(
                     f"{scanner_name} (no matching files)"
                 )
+                self._emit_output(
+                    "Discovery",
+                    f"  ✗ {scanner_name} — no matching files\n"
+                )
                 continue
 
             # This scanner is relevant and available — add it to the plan
@@ -727,6 +796,40 @@ class ParallelScanOrchestrator:
             scanner_tool_map[scanner_name] = available_skills[
                 scanner_name
             ]["tool_name"]
+            self._emit_output(
+                "Discovery",
+                f"  ✓ {scanner_name} — selected\n"
+            )
+
+        # Apply scanner whitelist filter if one was provided.
+        # This runs AFTER availability + relevance checks so that
+        # only scanners that are both installed and relevant for the
+        # files found can be whitelisted.
+        if self._scanner_whitelist is not None:
+            whitelist_set = set(self._scanner_whitelist)
+            filtered: List[str] = []
+            for name in scanners_to_run:
+                if name in whitelist_set:
+                    filtered.append(name)
+                else:
+                    skipped_scanners.append(
+                        f"{name} (not selected by user)"
+                    )
+                    self._emit_output(
+                        "Discovery",
+                        f"  ✗ {name} — not selected by user\n"
+                    )
+            scanners_to_run = filtered
+            # Also keep only whitelisted entries in the tool map
+            scanner_tool_map = {
+                k: v for k, v in scanner_tool_map.items()
+                if k in whitelist_set
+            }
+
+        self._emit_output(
+            "Discovery",
+            f"\nScan plan: {len(scanners_to_run)} scanners will run\n"
+        )
 
         return ScanPlan(
             folder_path=folder_path,
@@ -907,6 +1010,24 @@ class ParallelScanOrchestrator:
                 on_tool_stuck=on_tool_stuck,
                 log_dir=log_dir,
                 system_message=system_message,
+                on_tool_start=lambda tn, detail, args, cid: (
+                    self._emit_output(
+                        scanner_name,
+                        f"▶ {tn}"
+                        + (f": {detail}" if detail else "")
+                        + "\n"
+                    )
+                ),
+                on_tool_complete=lambda tn, detail, output, cid: (
+                    self._emit_output(
+                        scanner_name,
+                        (output[:4000] if output else "(no output)")
+                        + "\n"
+                    )
+                ),
+                on_assistant_message=lambda content: (
+                    self._emit_output(scanner_name, content + "\n")
+                ),
             )
 
             elapsed = time.time() - start_time
@@ -1035,6 +1156,24 @@ class ParallelScanOrchestrator:
                 on_tool_stuck=on_tool_stuck,
                 log_dir=log_dir,
                 system_message=LLM_ANALYSIS_SYSTEM_MESSAGE,
+                on_tool_start=lambda tn, detail, args, cid: (
+                    self._emit_output(
+                        "LLM Analysis",
+                        f"▶ {tn}"
+                        + (f": {detail}" if detail else "")
+                        + "\n"
+                    )
+                ),
+                on_tool_complete=lambda tn, detail, output, cid: (
+                    self._emit_output(
+                        "LLM Analysis",
+                        (output[:4000] if output else "(no output)")
+                        + "\n"
+                    )
+                ),
+                on_assistant_message=lambda content: (
+                    self._emit_output("LLM Analysis", content + "\n")
+                ),
             )
 
             elapsed = time.time() - start_time
@@ -1121,6 +1260,12 @@ class ParallelScanOrchestrator:
             # _run_session_to_completion approach.
             logger.debug(f"[{label}] Sending synthesis prompt...")
 
+            # Stream synthesis activity to the VS Code output channel
+            self._emit_output(
+                "Synthesis",
+                f"Synthesizing results from {len(sub_results)} sources...\n"
+            )
+
             # Log the prompt if we have a session logger
             slog: Optional[SessionLogger] = None
             if log_dir:
@@ -1155,6 +1300,15 @@ class ParallelScanOrchestrator:
             content = None
             if response and hasattr(response, "data"):
                 content = getattr(response.data, "content", None)
+
+            # Stream synthesis result to the VS Code output channel
+            if content:
+                self._emit_output("Synthesis", content + "\n")
+            else:
+                self._emit_output(
+                    "Synthesis",
+                    "Synthesis produced no output — using fallback report\n"
+                )
 
             if slog:
                 if content:
@@ -1419,7 +1573,8 @@ class ParallelScanOrchestrator:
         parts.append("---\n")
         parts.append(
             "Now compile all the above findings into your "
-            "consolidated security report."
+            "consolidated security report.  Output the COMPLETE report "
+            "directly in your response — do NOT write it to a file."
         )
 
         return "\n".join(parts)

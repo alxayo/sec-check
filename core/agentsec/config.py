@@ -32,7 +32,7 @@ import os
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 # Try to import yaml, but provide helpful error if not installed
 try:
@@ -246,6 +246,13 @@ class AgentSecConfig:
     # detect malicious patterns that pure pattern-matching tools miss.
     enable_llm_analysis: bool = field(default=True)
 
+    # ── Scanner selection ────────────────────────────────────────────
+    # When set, only the listed scanners will be used during parallel
+    # scanning.  None means "use all relevant and available scanners"
+    # (the default behaviour).  Names must match SCANNER_REGISTRY keys
+    # (e.g. "bandit-security-scan", "trivy-security-scan").
+    scanners: Optional[List[str]] = field(default=None)
+
     # ── Source tracking ──────────────────────────────────────────────
     # These fields record WHERE each value came from so the CLI can
     # print provenance information (e.g. "built-in default" vs.
@@ -253,6 +260,7 @@ class AgentSecConfig:
     system_message_source: str = field(default=SOURCE_BUILTIN)
     initial_prompt_source: str = field(default=SOURCE_BUILTIN)
     model_source: str = field(default=SOURCE_BUILTIN)
+    scanners_source: str = field(default=SOURCE_BUILTIN)
     
     @classmethod
     def load(
@@ -346,15 +354,25 @@ class AgentSecConfig:
 
         # Parse LLM deep analysis toggle
         enable_llm_analysis = raw_config.get("enable_llm_analysis", True)
+
+        # Parse scanner selection list
+        raw_scanners = raw_config.get("scanners")
+        scanners = None
+        scanners_source = SOURCE_BUILTIN
+        if isinstance(raw_scanners, list) and raw_scanners:
+            scanners = [str(s).strip() for s in raw_scanners if str(s).strip()]
+            scanners_source = f"{SOURCE_CONFIG_FILE}: {config_label}"
         
         return cls(
             system_message=system_message,
             initial_prompt=initial_prompt,
             model=model,
             enable_llm_analysis=enable_llm_analysis,
+            scanners=scanners,
             system_message_source=sm_source,
             initial_prompt_source=ip_source,
             model_source=model_source,
+            scanners_source=scanners_source,
         )
     
     @classmethod
@@ -496,6 +514,7 @@ class AgentSecConfig:
         initial_prompt_file: Optional[str] = None,
         model: Optional[str] = None,
         enable_llm_analysis: Optional[bool] = None,
+        scanners: Optional[List[str]] = None,
     ) -> "AgentSecConfig":
         """
         Create a new config with CLI overrides applied.
@@ -527,9 +546,11 @@ class AgentSecConfig:
         new_initial_prompt = self.initial_prompt
         new_model = self.model
         new_enable_llm_analysis = self.enable_llm_analysis
+        new_scanners = self.scanners
         new_sm_source = self.system_message_source
         new_ip_source = self.initial_prompt_source
         new_model_source = self.model_source
+        new_scanners_source = self.scanners_source
         
         # Apply system_message override (text has priority over file)
         if system_message is not None:
@@ -561,15 +582,22 @@ class AgentSecConfig:
         # Apply LLM analysis override
         if enable_llm_analysis is not None:
             new_enable_llm_analysis = enable_llm_analysis
+
+        # Apply scanner selection override
+        if scanners is not None:
+            new_scanners = scanners
+            new_scanners_source = f"{SOURCE_CLI_FLAG}: --scanners"
         
         return AgentSecConfig(
             system_message=new_system_message,
             initial_prompt=new_initial_prompt,
             model=new_model,
             enable_llm_analysis=new_enable_llm_analysis,
+            scanners=new_scanners,
             system_message_source=new_sm_source,
             initial_prompt_source=new_ip_source,
             model_source=new_model_source,
+            scanners_source=new_scanners_source,
         )
     
     @staticmethod

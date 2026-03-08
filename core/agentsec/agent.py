@@ -610,6 +610,8 @@ class SecurityScannerAgent:
         max_concurrent: int = 3,
         on_tool_stuck: Optional[OnToolStuckCallback] = None,
         log_dir: Optional[str] = None,
+        on_output=None,
+        scanners: Optional[list] = None,
     ) -> dict:
         """
         Run a security scan using parallel sub-agent sessions.
@@ -635,6 +637,9 @@ class SecurityScannerAgent:
             max_concurrent: Maximum sub-agent sessions running at the same
                             time.  Default is 3 to stay within typical API
                             rate limits.
+            scanners:       Optional list of scanner names to include.
+                            When set, only these scanners will be used.
+                            None means "use all relevant and available".
 
         Returns:
             A dictionary with:
@@ -662,10 +667,15 @@ class SecurityScannerAgent:
             # orchestrator as an optional component.
             from agentsec.orchestrator import ParallelScanOrchestrator
 
+            # Resolve scanner whitelist: explicit param > config > None (all)
+            effective_scanners = scanners if scanners is not None else self.config.scanners
+
             orchestrator = ParallelScanOrchestrator(
                 client=self.client,
                 config=self.config,
                 max_concurrent=max_concurrent,
+                on_output=on_output,
+                scanner_whitelist=effective_scanners,
             )
 
             logger.info(

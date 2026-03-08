@@ -1,0 +1,209 @@
+{
+  "name": "agentsec",
+  "displayName": "AgentSec Security Scanner",
+  "description": "AI-powered security scanning agent that orchestrates multiple security tools in parallel and performs LLM-based semantic code review.",
+  "version": "0.1.0",
+  "publisher": "agentsec",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Testing"
+  ],
+  "keywords": [
+    "security",
+    "scanner",
+    "vulnerability",
+    "copilot",
+    "ai"
+  ],
+  "icon": "media/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentsec.scanWorkspace",
+        "title": "AgentSec: Scan Workspace for Security Issues",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "agentsec.scanFolder",
+        "title": "AgentSec: Scan Folder for Security Issues",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "agentsec.scanFile",
+        "title": "AgentSec: Scan File for Security Issues"
+      },
+      {
+        "command": "agentsec.showDashboard",
+        "title": "AgentSec: Show Scan Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "agentsec.cancelScan",
+        "title": "AgentSec: Cancel Running Scan"
+      },
+      {
+        "command": "agentsec.refreshTools",
+        "title": "AgentSec: Refresh Tool Status",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentsec",
+          "title": "AgentSec",
+          "icon": "media/shield.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentsec": [
+        {
+          "type": "webview",
+          "id": "agentsec.dashboard",
+          "name": "Scan Dashboard"
+        },
+        {
+          "id": "agentsec.toolStatus",
+          "name": "Security Scanners"
+        },
+        {
+          "id": "agentsec.results",
+          "name": "Scan Results"
+        }
+      ]
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "agentsec.scanFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "7_modification"
+        },
+        {
+          "command": "agentsec.scanFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "7_modification"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "agentsec.refreshTools",
+          "when": "view == agentsec.toolStatus",
+          "group": "navigation"
+        },
+        {
+          "command": "agentsec.scanWorkspace",
+          "when": "view == agentsec.results",
+          "group": "navigation"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "agentsec.chat",
+        "name": "agentsec",
+        "fullName": "AgentSec Security Scanner",
+        "description": "Scan code for security vulnerabilities using multiple tools in parallel",
+        "isSticky": false,
+        "commands": [
+          {
+            "name": "scan",
+            "description": "Run a full parallel security scan on the workspace"
+          },
+          {
+            "name": "quick-scan",
+            "description": "Quick scan (skip LLM deep analysis)"
+          },
+          {
+            "name": "supply-chain",
+            "description": "Scan dependencies for supply chain attacks"
+          },
+          {
+            "name": "results",
+            "description": "Show the latest scan results"
+          },
+          {
+            "name": "tools",
+            "description": "Show available and missing security scanner tools"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "AgentSec",
+      "properties": {
+        "agentsec.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to the Python interpreter with agentsec-core installed."
+        },
+        "agentsec.model": {
+          "type": "string",
+          "default": "gpt-5",
+          "description": "LLM model to use for scanning sessions."
+        },
+        "agentsec.maxConcurrent": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of parallel scanner sessions."
+        },
+        "agentsec.enableLlmAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable LLM deep analysis phase (semantic code review)."
+        },
+        "agentsec.scanTimeout": {
+          "type": "number",
+          "default": 1800,
+          "minimum": 60,
+          "description": "Safety timeout for scans in seconds."
+        },
+        "agentsec.scanMode": {
+          "type": "string",
+          "default": "parallel",
+          "enum": [
+            "parallel",
+            "serial"
+          ],
+          "enumDescriptions": [
+            "Run scanners in parallel using sub-agent sessions (recommended)",
+            "Run scanners sequentially in a single session"
+          ],
+          "description": "Scan execution mode."
+        },
+        "agentsec.promptScannerSelection": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a scanner selection picker before each scan. When enabled, a QuickPick dialog lets you choose which installed scanners to run."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.config.mjs --production",
+    "watch": "node esbuild.config.mjs --watch",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

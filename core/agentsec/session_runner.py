@@ -129,6 +129,10 @@ OnToolStartHook = Callable[[str, str, dict, Optional[str]], None]
 # Receives (tool_name, detail, output, tool_call_id).
 OnToolCompleteHook = Callable[[str, str, str, Optional[str]], None]
 
+# Callback signature for custom processing on assistant message events.
+# Receives (content).
+OnAssistantMessageHook = Callable[[str], None]
+
 
 # ── Activity event matching ──────────────────────────────────────────
 
@@ -236,6 +240,7 @@ async def run_session_to_completion(
     system_message: Optional[str] = None,
     on_tool_start: Optional[OnToolStartHook] = None,
     on_tool_complete: Optional[OnToolCompleteHook] = None,
+    on_assistant_message: Optional[OnAssistantMessageHook] = None,
 ) -> dict:
     """
     Send a prompt to a session and wait for it to finish.
@@ -271,6 +276,8 @@ async def run_session_to_completion(
                             Receives (tool_name, detail, args, tool_call_id).
         on_tool_complete:   Optional hook called on TOOL_EXECUTION_COMPLETE.
                             Receives (tool_name, detail, output, tool_call_id).
+        on_assistant_message: Optional hook called on ASSISTANT_MESSAGE.
+                            Receives (content).
 
     Returns:
         A dict with keys:
@@ -416,6 +423,11 @@ async def run_session_to_completion(
                         final_response["content"] = content
                         if slog:
                             slog.log_assistant_message(content)
+                        if on_assistant_message:
+                            try:
+                                on_assistant_message(content)
+                            except Exception:
+                                pass
 
             elif event.type == SessionEventType.SESSION_IDLE:
                 logger.debug(f"[{label}] Session idle")

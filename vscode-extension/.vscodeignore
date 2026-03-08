@@ -1,0 +1,7 @@
+.vscode-test/
+node_modules/
+src/
+test/
+tsconfig.json
+esbuild.config.mjs
+.eslintrc.*
