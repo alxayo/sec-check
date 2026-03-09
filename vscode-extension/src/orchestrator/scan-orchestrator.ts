@@ -12,7 +12,7 @@ import { AgentSecBridge } from "../backend/bridge.js";
 import type { Finding, ProgressMessage, ResultMessage, ScannerInfo, ScannerOutputMessage, ScanState } from "../backend/types.js";
 import { createInitialScanState } from "../backend/types.js";
 import { getExtensionConfig, toScanConfig } from "../utils/config.js";
-import { parseFindings, pushFindings } from "../utils/diagnostics.js";
+import { parseFindings, pushFindings, resolveAllPaths } from "../utils/diagnostics.js";
 import { SubagentRegistry } from "./subagent-registry.js";
 
 /**
@@ -289,7 +289,7 @@ export class ScanOrchestrator {
     this.emitStateChange();
   }
 
-  private handleResult(msg: ResultMessage): void {
+  private async handleResult(msg: ResultMessage): Promise<void> {
     this._isScanning = false;
 
     if (!this._state) {
@@ -358,7 +358,7 @@ export class ScanOrchestrator {
       this.outputChannel.info(
         `[handleResult] Pushing ${this._findings.length} findings to diagnostics (workspaceRoot="${workspaceRoot}")`
       );
-      pushFindings(this._findings, workspaceRoot);
+      await pushFindings(this._findings, workspaceRoot);
 
       // Update issuesFound from parsed findings so dashboard shows the real count
       this._state.issuesFound = this._findings.length;

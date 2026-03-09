@@ -190,4 +190,12 @@ export interface Finding {
   source: string;
   codeSnippet: string;
   description: string;
+  /** Detailed context paragraphs from the report (vulnerability explanation). */
+  details: string;
+  /** Remediation guidance extracted from the report. */
+  remediation: string;
+  /** Confidence note, e.g. "High-Confidence: confirmed by graudit + trivy". */
+  confidence: string;
+  /** Resolved absolute file path (populated after fuzzy file search). */
+  resolvedFilePath: string;
 }

@@ -118,19 +118,69 @@ class FindingItem extends vscode.TreeItem {
     super(label, vscode.TreeItemCollapsibleState.None);
 
     this.description = `${shortPath}:${finding.lineNumber}`;
-    this.tooltip = [
-      `[${finding.severity}] ${finding.title}`,
-      `File: ${finding.filePath}:${finding.lineNumber}`,
-      finding.source ? `Source: ${finding.source}` : "",
-      finding.codeSnippet ? `\n${finding.codeSnippet}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
 
-    // Click to navigate to the finding
-    const absPath = finding.filePath.startsWith("/") || finding.filePath.includes(":")
-      ? finding.filePath
-      : `${workspaceRoot}/${finding.filePath}`;
+    // Build a rich Markdown tooltip with full finding details
+    const tooltipMd = new vscode.MarkdownString("", true);
+    tooltipMd.isTrusted = true;
+
+    // Severity badge and title
+    const severityIcon =
+      finding.severity === "CRITICAL" || finding.severity === "HIGH"
+        ? "$(error)"
+        : finding.severity === "MEDIUM"
+          ? "$(warning)"
+          : "$(info)";
+    tooltipMd.appendMarkdown(
+      `${severityIcon} **[${finding.severity}]** ${finding.title}\n\n`
+    );
+
+    // File location
+    tooltipMd.appendMarkdown(
+      `**File:** \`${finding.filePath}:${finding.lineNumber}\`\n\n`
+    );
+
+    // Source scanner
+    if (finding.source) {
+      tooltipMd.appendMarkdown(
+        `**Scanner:** ${finding.source}\n\n`
+      );
+    }
+
+    // Confidence
+    if (finding.confidence) {
+      tooltipMd.appendMarkdown(
+        `**Confidence:** ${finding.confidence}\n\n`
+      );
+    }
+
+    // Details / description
+    if (finding.details) {
+      tooltipMd.appendMarkdown(`---\n\n`);
+      tooltipMd.appendMarkdown(`**Details:**\n\n${finding.details}\n\n`);
+    }
+
+    // Code snippet
+    if (finding.codeSnippet) {
+      tooltipMd.appendMarkdown(`**Code:**\n\n`);
+      tooltipMd.appendCodeblock(finding.codeSnippet);
+      tooltipMd.appendMarkdown(`\n`);
+    }
+
+    // Remediation
+    if (finding.remediation) {
+      tooltipMd.appendMarkdown(`---\n\n`);
+      tooltipMd.appendMarkdown(`**Remediation:**\n\n${finding.remediation}\n\n`);
+    }
+
+    this.tooltip = tooltipMd;
+
+    // Use the resolved path (from fuzzy search) if available,
+    // otherwise fall back to the standard path construction
+    const absPath = finding.resolvedFilePath || (
+      finding.filePath.startsWith("/") || finding.filePath.includes(":")
+        ? finding.filePath
+        : `${workspaceRoot}/${finding.filePath}`
+    );
 
     this.command = {
       command: "vscode.open",

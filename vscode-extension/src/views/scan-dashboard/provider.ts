@@ -8,6 +8,7 @@
 import * as vscode from "vscode";
 import type { ScanState } from "../../backend/types.js";
 import { getOutputChannel } from "../../utils/output-channel.js";
+import { resolveFilePath } from "../../utils/diagnostics.js";
 
 /**
  * WebviewViewProvider for the AgentSec scan dashboard.
@@ -62,11 +63,16 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
           break;
         case "openFile":
           if (message.filePath) {
-            const uri = vscode.Uri.file(message.filePath);
-            const line = Math.max(0, (message.lineNumber || 1) - 1);
-            vscode.window.showTextDocument(uri, {
-              selection: new vscode.Range(line, 0, line, 0),
-            });
+            const workspaceRoot = this.currentState?.targetFolder || "";
+            resolveFilePath(message.filePath, workspaceRoot).then(
+              (resolved) => {
+                const uri = vscode.Uri.file(resolved);
+                const line = Math.max(0, (message.lineNumber || 1) - 1);
+                vscode.window.showTextDocument(uri, {
+                  selection: new vscode.Range(line, 0, line, 0),
+                });
+              }
+            );
           }
           break;
         case "showOutput":
