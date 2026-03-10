@@ -11,6 +11,20 @@ import { getOutputChannel } from "../../utils/output-channel.js";
 import { resolveFilePath } from "../../utils/diagnostics.js";
 
 /**
+ * Summary of a completed scan, stored in the history list.
+ */
+interface ScanHistoryEntry {
+  timestamp: string;
+  targetFolder: string;
+  issuesFound: number;
+  elapsedSeconds: number;
+  reportPath: string;
+  scannersUsed: string[];
+  mode: "parallel" | "serial";
+  status: "success" | "error" | "timeout";
+}
+
+/**
  * WebviewViewProvider for the AgentSec scan dashboard.
  *
  * Registered as the "agentsec.dashboard" view in package.json.
@@ -19,6 +33,9 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private extensionUri: vscode.Uri;
   private currentState: ScanState | null = null;
+
+  /** Completed scan history (most recent first, session-scoped). */
+  private scanHistory: ScanHistoryEntry[] = [];
 
   /** Called when the user clicks a scanner card or phase header. */
   onShowOutput?: (name: string) => void;
@@ -41,6 +58,10 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       localResourceRoots: [this.extensionUri],
     };
+
+    // Keep the webview DOM alive when the panel is collapsed/hidden
+    // so scan results and history are not lost on toggle.
+    webviewView.options = { webviewOptions: { retainContextWhenHidden: true } };
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
@@ -85,27 +106,75 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
           out.info("[dashboard] Open report requested");
           this.onOpenReport?.();
           break;
+        case "openHistoryReport":
+          if (message.reportPath) {
+            out.info(`[dashboard] Opening history report: ${message.reportPath}`);
+            vscode.window.showTextDocument(
+              vscode.Uri.file(message.reportPath),
+              { preview: false }
+            );
+          }
+          break;
+        case "ready":
+          // Webview script finished loading — send current state + history
+          out.info("[dashboard] Webview ready — restoring state");
+          if (this.currentState) {
+            this.postState(this.currentState);
+          }
+          break;
       }
     });
-
-    // If we already have state, send it to the new webview
-    if (this.currentState) {
-      this.postState(this.currentState);
-    }
   }
 
   /**
    * Update the dashboard with new scan state.
    */
   updateState(state: ScanState): void {
+    // When a scan just completed, add it to history
+    if (
+      state.phase === "complete" &&
+      this.currentState?.phase !== "complete"
+    ) {
+      this.scanHistory.unshift({
+        timestamp: new Date().toISOString(),
+        targetFolder: state.targetFolder,
+        issuesFound: state.issuesFound,
+        elapsedSeconds: state.elapsedSeconds,
+        reportPath: state.reportPath,
+        scannersUsed: state.scanners.map((s) => s.name),
+        mode: state.mode,
+        status: "success",
+      });
+    } else if (
+      state.phase === "error" &&
+      this.currentState?.phase !== "error" &&
+      state.targetFolder
+    ) {
+      this.scanHistory.unshift({
+        timestamp: new Date().toISOString(),
+        targetFolder: state.targetFolder,
+        issuesFound: state.issuesFound,
+        elapsedSeconds: state.elapsedSeconds,
+        reportPath: state.reportPath,
+        scannersUsed: state.scanners.map((s) => s.name),
+        mode: state.mode,
+        status: "error",
+      });
+    }
+
     this.currentState = state;
     this.postState(state);
   }
 
   private postState(state: ScanState): void {
-    const visible = !!this.view?.visible;
-    if (visible) {
-      this.view!.webview.postMessage({ type: "stateUpdate", state });
+    // Always post — the ready handshake and retainContextWhenHidden
+    // ensure the webview is alive when this is called.
+    if (this.view) {
+      this.view.webview.postMessage({
+        type: "stateUpdate",
+        state,
+        history: this.scanHistory,
+      });
     }
     // Log only on phase transitions or completion to avoid spamming
     if (state.phase === "complete" || state.phase === "error") {
@@ -113,7 +182,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
       out.info(
         `[dashboard.postState] phase=${state.phase}, issues=${state.issuesFound}, ` +
         `scanners=${state.scanners.length}, resultContent=${state.resultContent?.length ?? 0} chars, ` +
-        `reportPath="${state.reportPath || "(none)"}", webviewVisible=${visible}`
+        `reportPath="${state.reportPath || "(none)"}"`
       );
     }
   }
@@ -308,6 +377,75 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-descriptionForeground);
       font-size: 10px;
     }
+
+    /* History section */
+    .history-section {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
+    }
+    .history-section h2 {
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+    .history-row {
+      border: 1px solid var(--vscode-panel-border, #333);
+      border-radius: var(--card-radius);
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-row:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .history-row .history-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .history-row .history-main {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-row .history-details {
+      color: var(--vscode-descriptionForeground);
+      font-size: 10px;
+      margin-top: 2px;
+    }
+    .history-row .history-actions {
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .history-row.error {
+      border-left: 3px solid var(--vscode-errorForeground, #f44);
+    }
+    .history-row.success {
+      border-left: 3px solid var(--vscode-charts-green, #4caf50);
+    }
+
+    /* Completion footer (replaces cancel button on complete) */
+    .completion-footer {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid var(--vscode-panel-border, #333);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .completion-footer .completion-stats {
+      font-weight: 600;
+      color: var(--vscode-foreground);
+    }
+    .completion-footer .completion-buttons {
+      display: flex;
+      gap: 6px;
+    }
   </style>
 </head>
 <body>
@@ -362,19 +500,25 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
         <div class="phase-body empty" id="phase-synthesis-body"></div>
       </div>
 
-      <div class="footer">
+      <div class="footer" id="scan-footer">
         <span id="elapsed"></span>
         <button class="secondary" id="cancel-btn">Cancel</button>
       </div>
+
+      <div class="completion-footer" id="completion-footer" style="display:none;">
+        <div>
+          <span class="completion-stats" id="completion-stats"></span>
+        </div>
+        <div class="completion-buttons">
+          <button id="open-report-btn" style="display:none;">&#128196; View Report</button>
+          <button id="new-scan-btn">New Scan</button>
+        </div>
+      </div>
     </div>
 
-    <div id="results-view" style="display:none;">
-      <div class="meta" id="results-meta"></div>
-      <div id="results-list"></div>
-      <div class="footer">
-        <button id="open-report-btn" style="display:none;">&#128196; View Full Report</button>
-        <button id="new-scan-btn">New Scan</button>
-      </div>
+    <div id="history-section" class="history-section" style="display:none;">
+      <h2>Scan History</h2>
+      <div id="history-list"></div>
     </div>
 
     <div id="error-view" style="display:none;">
@@ -423,7 +567,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
       cancelScan();
     });
     document.getElementById('new-scan-btn').addEventListener('click', function() {
-      log('New Scan button clicked (results view)');
+      log('New Scan button clicked');
       startScan();
     });
     document.getElementById('open-report-btn').addEventListener('click', function() {
@@ -437,19 +581,29 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
 
     log('All button event listeners attached');
 
+    // Notify the extension that the webview script is ready
+    // to receive state updates. This handshake ensures state
+    // is restored after the webview is recreated.
+    vscode.postMessage({ command: 'ready' });
+    log('Sent ready handshake to extension');
+
     const phaseOrder = ['idle', 'discovery', 'parallel_scan', 'llm_analysis', 'synthesis', 'complete', 'error'];
 
-    function updateDashboard(state) {
+    function updateDashboard(state, history) {
       const idleView = document.getElementById('idle-view');
       const scanView = document.getElementById('scan-view');
-      const resultsView = document.getElementById('results-view');
       const errorView = document.getElementById('error-view');
+      const historySection = document.getElementById('history-section');
+      const scanFooter = document.getElementById('scan-footer');
+      const completionFooter = document.getElementById('completion-footer');
 
       // Hide all views
       idleView.style.display = 'none';
       scanView.style.display = 'none';
-      resultsView.style.display = 'none';
       errorView.style.display = 'none';
+
+      // Always render history if available
+      renderHistory(history);
 
       if (state.phase === 'idle') {
         idleView.style.display = '';
@@ -463,23 +617,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      if (state.phase === 'complete') {
-        resultsView.style.display = '';
-        document.getElementById('results-meta').textContent =
-          'Completed in ' + Math.round(state.elapsedSeconds) + 's  |  ' +
-          state.issuesFound + ' findings';
-
-        // Show "View Full Report" button when a report file exists
-        var reportBtn = document.getElementById('open-report-btn');
-        if (state.reportPath) {
-          reportBtn.style.display = '';
-        } else {
-          reportBtn.style.display = 'none';
-        }
-        return;
-      }
-
-      // Active scan phases
+      // Show scan-view for both active phases AND completion
       scanView.style.display = '';
 
       // Meta line
@@ -500,7 +638,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
         const pIdx = phaseOrder.indexOf(p.active);
         const statusEl = document.getElementById('phase-' + p.id + '-status');
         const headerEl = document.getElementById('phase-' + p.id).querySelector('.phase-header');
-        if (currentIdx > pIdx) {
+        if (currentIdx > pIdx || state.phase === 'complete') {
           statusEl.textContent = 'done';
         } else if (currentIdx === pIdx) {
           statusEl.textContent = 'running...';
@@ -508,7 +646,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
           statusEl.textContent = 'pending';
         }
         // Make phase headers clickable once they have started (not pending)
-        if (p.channel && currentIdx >= pIdx) {
+        if (p.channel && (currentIdx >= pIdx || state.phase === 'complete')) {
           headerEl.classList.add('clickable');
           headerEl.onclick = function() {
             vscode.postMessage({ command: 'showOutput', name: p.channel });
@@ -544,12 +682,103 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
       }
 
       // Progress bar
-      const pct = state.percentComplete >= 0 ? state.percentComplete : 0;
+      var pct = state.phase === 'complete' ? 100 : (state.percentComplete >= 0 ? state.percentComplete : 0);
       document.getElementById('scan-progress').style.width = pct + '%';
 
-      // Elapsed
-      document.getElementById('elapsed').textContent =
-        'Elapsed: ' + Math.round(state.elapsedSeconds) + 's | Findings: ' + state.issuesFound;
+      // Switch between scan footer (cancel) and completion footer
+      if (state.phase === 'complete') {
+        scanFooter.style.display = 'none';
+        completionFooter.style.display = '';
+
+        // Completion stats
+        document.getElementById('completion-stats').textContent =
+          '\\u2705 Completed in ' + Math.round(state.elapsedSeconds) + 's  |  ' +
+          state.issuesFound + ' findings';
+
+        // Show report button
+        var reportBtn = document.getElementById('open-report-btn');
+        reportBtn.style.display = state.reportPath ? '' : 'none';
+      } else {
+        scanFooter.style.display = '';
+        completionFooter.style.display = 'none';
+
+        // Elapsed
+        document.getElementById('elapsed').textContent =
+          'Elapsed: ' + Math.round(state.elapsedSeconds) + 's | Findings: ' + state.issuesFound;
+      }
+    }
+
+    function renderHistory(history) {
+      var section = document.getElementById('history-section');
+      var list = document.getElementById('history-list');
+
+      if (!history || history.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = '';
+      list.innerHTML = '';
+
+      for (var i = 0; i < history.length; i++) {
+        var entry = history[i];
+        var row = document.createElement('div');
+        row.className = 'history-row ' + entry.status;
+
+        // Format date/time
+        var dt = new Date(entry.timestamp);
+        var dateStr = (dt.getMonth() + 1).toString().padStart(2, '0') + '/' +
+          dt.getDate().toString().padStart(2, '0') + ' ' +
+          dt.getHours().toString().padStart(2, '0') + ':' +
+          dt.getMinutes().toString().padStart(2, '0');
+
+        // Shorten folder path for display
+        var folder = entry.targetFolder || '';
+        var folderParts = folder.replace(/\\\\/g, '/').split('/');
+        var shortFolder = folderParts.length > 2
+          ? '.../' + folderParts.slice(-2).join('/')
+          : folder;
+
+        // Duration
+        var durMin = Math.floor(entry.elapsedSeconds / 60);
+        var durSec = Math.round(entry.elapsedSeconds % 60);
+        var durStr = durMin > 0 ? durMin + 'm ' + durSec + 's' : durSec + 's';
+
+        // Status icon
+        var statusIcon = entry.status === 'success' ? '\\u2705' : '\\u274C';
+
+        var infoDiv = document.createElement('div');
+        infoDiv.className = 'history-info';
+        infoDiv.innerHTML =
+          '<div class="history-main">' + statusIcon + ' ' + escapeHtml(shortFolder) + '</div>' +
+          '<div class="history-details">' +
+            escapeHtml(dateStr) + '  \\u2022  ' +
+            entry.issuesFound + ' findings  \\u2022  ' +
+            escapeHtml(durStr) + '  \\u2022  ' +
+            escapeHtml(entry.mode) +
+          '</div>';
+        row.appendChild(infoDiv);
+
+        // "Open" button (only if report exists)
+        if (entry.reportPath) {
+          var btn = document.createElement('button');
+          btn.className = 'secondary';
+          btn.textContent = 'Open';
+          btn.title = 'Open the scan report';
+          (function(rp) {
+            btn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              vscode.postMessage({ command: 'openHistoryReport', reportPath: rp });
+            });
+          })(entry.reportPath);
+          var actionsDiv = document.createElement('div');
+          actionsDiv.className = 'history-actions';
+          actionsDiv.appendChild(btn);
+          row.appendChild(actionsDiv);
+        }
+
+        list.appendChild(row);
+      }
     }
 
     function escapeHtml(str) {
@@ -561,7 +790,7 @@ export class ScanDashboardProvider implements vscode.WebviewViewProvider {
     window.addEventListener('message', (event) => {
       const message = event.data;
       if (message.type === 'stateUpdate') {
-        updateDashboard(message.state);
+        updateDashboard(message.state, message.history || []);
       }
     });
   </script>

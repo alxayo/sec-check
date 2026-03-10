@@ -52,6 +52,10 @@
         "command": "agentsec.refreshTools",
         "title": "AgentSec: Refresh Tool Status",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "agentsec.scanScmResource",
+        "title": "AgentSec: Scan for Security Issues"
       }
     ],
     "viewsContainers": {
@@ -90,6 +94,18 @@
         {
           "command": "agentsec.scanFile",
           "when": "!explorerResourceIsFolder",
+          "group": "7_modification"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "agentsec.scanScmResource",
+          "group": "7_modification"
+        }
+      ],
+      "scm/resourceFolder/context": [
+        {
+          "command": "agentsec.scanScmResource",
           "group": "7_modification"
         }
       ],
@@ -148,7 +164,22 @@
         "agentsec.model": {
           "type": "string",
           "default": "gpt-5",
-          "description": "LLM model to use for scanning sessions."
+          "description": "Global LLM model for all scan phases. Per-phase overrides (modelScanners, modelAnalysis, modelSynthesis) take priority when set."
+        },
+        "agentsec.modelScanners": {
+          "type": "string",
+          "default": "",
+          "description": "LLM model for Phase 2 (parallel scanner sub-agents). Leave empty to use the global model."
+        },
+        "agentsec.modelAnalysis": {
+          "type": "string",
+          "default": "",
+          "description": "LLM model for Phase 3 (LLM deep analysis / semantic code review). Leave empty to use the global model."
+        },
+        "agentsec.modelSynthesis": {
+          "type": "string",
+          "default": "",
+          "description": "LLM model for Phase 4 (report synthesis). Leave empty to use the global model."
         },
         "agentsec.maxConcurrent": {
           "type": "number",
@@ -185,6 +216,46 @@
           "type": "boolean",
           "default": false,
           "description": "Show a scanner selection picker before each scan. When enabled, a QuickPick dialog lets you choose which installed scanners to run."
+        },
+        "agentsec.systemMessage": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Override the AI system message (instructions). Leave empty to use the built-in default."
+        },
+        "agentsec.systemMessageFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a file containing the system message. Overrides systemMessage when set."
+        },
+        "agentsec.initialPrompt": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Override the initial scan prompt template. Use {folder_path} as placeholder. Leave empty for default."
+        },
+        "agentsec.initialPromptFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a file containing the initial prompt template. Overrides initialPrompt when set."
+        },
+        "agentsec.configFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a YAML config file (agentsec.yaml). Leave empty for automatic search."
+        },
+        "agentsec.skipScanners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of scanner names to always exclude (e.g. graudit-security-scan). All other relevant scanners will still run."
+        },
+        "agentsec.verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose/debug logging in the AgentSec output channel."
         }
       }
     }

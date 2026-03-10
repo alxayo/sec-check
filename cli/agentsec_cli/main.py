@@ -565,8 +565,12 @@ async def run_scan(
     max_concurrent: int = 3,
     timeout: Optional[int] = None,
     model: Optional[str] = None,
+    model_scanners: Optional[str] = None,
+    model_analysis: Optional[str] = None,
+    model_synthesis: Optional[str] = None,
     no_llm_analysis: bool = False,
     scanners: Optional[list] = None,
+    files: Optional[list] = None,
 ) -> int:
     """
     Execute a security scan on the given folder.
@@ -631,6 +635,9 @@ async def run_scan(
             initial_prompt=prompt,
             initial_prompt_file=prompt_file,
             model=model,
+            model_scanners=model_scanners,
+            model_analysis=model_analysis,
+            model_synthesis=model_synthesis,
             enable_llm_analysis=False if no_llm_analysis else None,
             scanners=scanners,
         )
@@ -691,6 +698,7 @@ async def run_scan(
                 max_concurrent=max_concurrent,
                 on_tool_stuck=stuck_tool_handler,
                 log_dir=run_log_dir,
+                files=files,
             )
         else:
             # Serial mode: single LLM session (original behaviour)
@@ -699,6 +707,7 @@ async def run_scan(
                 timeout=float(timeout) if timeout else None,
                 on_tool_stuck=stuck_tool_handler,
                 log_dir=run_log_dir,
+                files=files,
             )
 
         # Step 9b: Update progress tracker with issue count from
@@ -909,6 +918,17 @@ def main() -> None:
         ),
     )
     scan_parser.add_argument(
+        "--files",
+        dest="files",
+        metavar="LIST",
+        help=(
+            "Comma-separated list of specific file paths to scan "
+            "instead of the entire folder.  The folder argument is "
+            "still required as the project root for context.  "
+            "Example: --files src/app.py,src/utils.py"
+        ),
+    )
+    scan_parser.add_argument(
         "--timeout",
         type=int,
         default=None,
@@ -986,6 +1006,38 @@ def main() -> None:
         ),
     )
 
+    # Per-phase model overrides
+    scan_parser.add_argument(
+        "--model-scanners",
+        dest="model_scanners",
+        metavar="MODEL",
+        default=None,
+        help=(
+            "Override the LLM model for Phase 2 (parallel scanner "
+            "sub-agents). When not set, uses --model."
+        ),
+    )
+    scan_parser.add_argument(
+        "--model-analysis",
+        dest="model_analysis",
+        metavar="MODEL",
+        default=None,
+        help=(
+            "Override the LLM model for Phase 3 (LLM deep analysis). "
+            "When not set, uses --model."
+        ),
+    )
+    scan_parser.add_argument(
+        "--model-synthesis",
+        dest="model_synthesis",
+        metavar="MODEL",
+        default=None,
+        help=(
+            "Override the LLM model for Phase 4 (report synthesis). "
+            "When not set, uses --model."
+        ),
+    )
+
     # Parse arguments
     args = parser.parse_args()
 
@@ -1025,6 +1077,13 @@ def main() -> None:
             except ImportError:
                 pass  # Will fail later with a clearer message
 
+        # Parse --files into a list of file paths
+        files_list = None
+        if getattr(args, "files", None):
+            files_list = [
+                f.strip() for f in args.files.split(",") if f.strip()
+            ]
+
         # Configure logging based on --verbose flag
         configure_logging(verbose=args.verbose)
 
@@ -1040,8 +1099,12 @@ def main() -> None:
                 max_concurrent=args.max_concurrent,
                 timeout=args.timeout,
                 model=args.model,
+                model_scanners=args.model_scanners,
+                model_analysis=args.model_analysis,
+                model_synthesis=args.model_synthesis,
                 no_llm_analysis=args.no_llm_analysis,
                 scanners=scanners_list,
+                files=files_list,
             )
         )
 

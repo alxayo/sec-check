@@ -62,6 +62,7 @@ from agentsec.skill_discovery import (
     SCANNER_RELEVANCE,
     FOLDERS_TO_SKIP,
     classify_files,
+    classify_file_list,
     is_scanner_relevant,
 )
 from agentsec.tool_health import (
@@ -480,6 +481,7 @@ class ParallelScanOrchestrator:
         timeout: float = 1800.0,
         on_tool_stuck: Optional[OnToolStuckCallback] = None,
         log_dir: Optional[str] = None,
+        files: Optional[List[str]] = None,
     ) -> dict:
         """
         Execute a full parallel security scan.
@@ -520,7 +522,7 @@ class ParallelScanOrchestrator:
 
         # ── Phase 1: Discovery & Planning ────────────────────────────
         logger.info("Phase 1: Discovering files and building scan plan…")
-        scan_plan = self._create_scan_plan(folder_path)
+        scan_plan = self._create_scan_plan(folder_path, files=files)
 
         # Announce the plan via progress tracker
         tracker = get_global_tracker()
@@ -696,26 +698,40 @@ class ParallelScanOrchestrator:
 
     # ── Phase 1 helpers ──────────────────────────────────────────────
 
-    def _create_scan_plan(self, folder_path: str) -> ScanPlan:
+    def _create_scan_plan(
+        self,
+        folder_path: str,
+        files: Optional[List[str]] = None,
+    ) -> ScanPlan:
         """
         Build a plan of which scanners to run on the target folder.
 
         This phase uses only Python (no LLM calls).  It:
         1. Walks the folder to classify files by extension / name.
+           When ``files`` is provided, only those paths are classified
+           instead of the full folder tree.
         2. Discovers available Copilot CLI skills via skill_discovery.
         3. Determines which scanners are relevant for the file types found.
         4. Returns a ScanPlan listing the scanners to execute.
 
         Args:
             folder_path: The folder to scan.
+            files:       Optional list of specific file paths.  When
+                         provided, the scan plan is based only on these
+                         files rather than the full folder walk.
 
         Returns:
             A ScanPlan dataclass with the list of scanners and metadata.
         """
         # Step 1: Classify files in the target folder
-        file_extensions, file_names, total_files = classify_files(
-            folder_path,
-        )
+        if files:
+            file_extensions, file_names, total_files = classify_file_list(
+                files,
+            )
+        else:
+            file_extensions, file_names, total_files = classify_files(
+                folder_path,
+            )
 
         logger.debug(
             f"File classification: {total_files} files, "
@@ -973,10 +989,11 @@ class ParallelScanOrchestrator:
             # SESSION_ERROR (same pattern as agent.py scan()).
             async def _create_sub_session():
                 sid = f"{session_id_base}-{int(time.time())}"
+                scanner_model = self._config.model_scanners or self._config.model
                 sess = await self._client.create_session(
                     SessionConfig(
                         session_id=sid,
-                        model=self._config.model,
+                        model=scanner_model,
                         system_message={
                             "mode": "append",
                             "content": system_message,
@@ -984,7 +1001,7 @@ class ParallelScanOrchestrator:
                         skill_directories=skill_dirs,
                     )
                 )
-                logger.debug(f"[{label}] Created session: {sid}")
+                logger.debug(f"[{label}] Created session: {sid} (model={scanner_model})")
                 return sess
 
             # Build the scan prompt
@@ -1122,10 +1139,11 @@ class ParallelScanOrchestrator:
             # create a fresh session on each retry attempt.
             async def _create_llm_session():
                 sid = f"agentsec-llm-analysis-{int(time.time())}"
+                analysis_model = self._config.model_analysis or self._config.model
                 sess = await self._client.create_session(
                     SessionConfig(
                         session_id=sid,
-                        model=self._config.model,
+                        model=analysis_model,
                         system_message={
                             "mode": "append",
                             "content": LLM_ANALYSIS_SYSTEM_MESSAGE,
@@ -1133,7 +1151,7 @@ class ParallelScanOrchestrator:
                         skill_directories=skill_dirs,
                     )
                 )
-                logger.debug(f"[{label}] Created session: {sid}")
+                logger.debug(f"[{label}] Created session: {sid} (model={analysis_model})")
                 return sess
 
             # Build the analysis prompt with deterministic findings
@@ -1236,10 +1254,11 @@ class ParallelScanOrchestrator:
             synth_skill_dirs = get_skill_directories(folder_path)
 
             # Create a synthesis session
+            synthesis_model = self._config.model_synthesis or self._config.model
             session = await self._client.create_session(
                 SessionConfig(
                     session_id=f"agentsec-synthesis-{int(time.time())}",
-                    model=self._config.model,
+                    model=synthesis_model,
                     system_message={
                         "mode": "append",
                         "content": SYNTHESIS_SYSTEM_MESSAGE,

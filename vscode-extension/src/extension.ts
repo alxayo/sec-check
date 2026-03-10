@@ -8,7 +8,7 @@
 import * as vscode from "vscode";
 import { AgentSecBridge, discoverTools } from "./backend/bridge.js";
 import { ScanOrchestrator } from "./orchestrator/scan-orchestrator.js";
-import { scanWorkspace, scanFolder, scanFile } from "./commands/scan.js";
+import { scanWorkspace, scanFolder, scanFile, scanScmResource } from "./commands/scan.js";
 import { ToolStatusProvider } from "./views/tool-status/provider.js";
 import { ResultsTreeProvider } from "./views/results-tree/provider.js";
 import { ScanDashboardProvider } from "./views/scan-dashboard/provider.js";
@@ -214,11 +214,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
 
-    vscode.commands.registerCommand("agentsec.scanFile", async (uri?: vscode.Uri) => {
-      outputChannel.info(`[command] agentsec.scanFile triggered, uri=${uri?.fsPath ?? "(none)"}`);
+    vscode.commands.registerCommand("agentsec.scanFile", async (uri?: vscode.Uri, allUris?: vscode.Uri[]) => {
+      outputChannel.info(`[command] agentsec.scanFile triggered, uri=${uri?.fsPath ?? "(none)"}, count=${allUris?.length ?? 0}`);
       try {
         const orch = await ensureOrchestrator();
-        await scanFile(orch, uri);
+        await scanFile(orch, uri, allUris);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         outputChannel.error(`[command] scanFile failed: ${msg}`);
@@ -254,6 +254,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const message = err instanceof Error ? err.message : String(err);
         outputChannel.error(`[command] refreshTools failed: ${message}`);
         vscode.window.showErrorMessage(`Tool discovery failed: ${message}`);
+      }
+    }),
+
+    vscode.commands.registerCommand("agentsec.scanScmResource", async (
+      resource?: { resourceUri: vscode.Uri },
+      allSelected?: { resourceUri: vscode.Uri }[],
+    ) => {
+      outputChannel.info(`[command] agentsec.scanScmResource triggered, resources=${allSelected?.length ?? (resource ? 1 : 0)}`);
+      try {
+        const orch = await ensureOrchestrator();
+        await scanScmResource(orch, resource, allSelected);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        outputChannel.error(`[command] scanScmResource failed: ${msg}`);
+        vscode.window.showErrorMessage(`AgentSec: ${msg}`);
       }
     }),
 

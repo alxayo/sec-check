@@ -99,11 +99,16 @@ export interface ScanCommand {
 
 export interface ScanConfig {
   model?: string;
+  modelScanners?: string;
+  modelAnalysis?: string;
+  modelSynthesis?: string;
   maxConcurrent?: number;
   enableLlmAnalysis?: boolean;
   timeout?: number;
   systemMessage?: string;
+  initialPrompt?: string;
   scanners?: string[];
+  files?: string[];
 }
 
 export interface CancelCommand {

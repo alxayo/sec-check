@@ -92,9 +92,13 @@ export class ScanOrchestrator {
 
   /**
    * Start a security scan.
+   *
+   * @param folder - The root folder to scan.
+   * @param files  - Optional list of specific file paths to scan
+   *                 instead of the full folder.
    */
-  async startScan(folder: string): Promise<void> {
-    this.outputChannel.info(`[orchestrator.startScan] Called with folder="${folder}"`);
+  async startScan(folder: string, files?: string[]): Promise<void> {
+    this.outputChannel.info(`[orchestrator.startScan] Called with folder="${folder}", files=${files?.length ?? 0}`);
     if (this._isScanning) {
       this.outputChannel.warn("[orchestrator.startScan] A scan is already running — ignoring");
       vscode.window.showWarningMessage("A scan is already running.");
@@ -155,6 +159,9 @@ export class ScanOrchestrator {
     const scanConfig = toScanConfig(config);
     if (selectedScanners) {
       scanConfig.scanners = selectedScanners;
+    }
+    if (files?.length) {
+      scanConfig.files = files;
     }
 
     this.outputChannel.info(`[orchestrator.startScan] Sending scan command to bridge...`);

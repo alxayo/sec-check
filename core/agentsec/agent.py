@@ -39,6 +39,7 @@ from agentsec.skill_discovery import (
     KNOWN_SCANNER_COMMANDS,
     SCANNER_RELEVANCE,
     classify_files,
+    classify_file_list,
     is_scanner_relevant,
 )
 from agentsec.tool_health import (
@@ -186,7 +187,7 @@ class SecurityScannerAgent:
             logger.error(f"Failed to initialize agent: {error}")
             raise
 
-    async def scan(self, folder_path: str, timeout: Optional[float] = None, on_tool_stuck: Optional[OnToolStuckCallback] = None, log_dir: Optional[str] = None) -> dict:
+    async def scan(self, folder_path: str, timeout: Optional[float] = None, on_tool_stuck: Optional[OnToolStuckCallback] = None, log_dir: Optional[str] = None, files: Optional[list] = None) -> dict:
         """
         Run a security scan on a folder.
 
@@ -210,6 +211,9 @@ class SecurityScannerAgent:
                          Defaults to DEFAULT_SCAN_TIMEOUT_SECONDS.
             on_tool_stuck: Optional async callback for stuck-tool decisions.
             log_dir:     Optional directory for session log files.
+            files:       Optional list of specific file paths to scan.
+                         When provided, only these files are analysed
+                         instead of the full folder.
 
         Returns:
             A dictionary with:
@@ -281,14 +285,21 @@ class SecurityScannerAgent:
                 return sess
 
             # Build the scan prompt using the configured template
-            scan_prompt = self.config.format_prompt(folder_path)
+            if files:
+                scan_prompt = self.config.format_prompt_for_files(
+                    folder_path, files
+                )
+            else:
+                scan_prompt = self.config.format_prompt(folder_path)
 
             # C1: Determine which scanners are irrelevant for the
             # target folder based on file types present.  In single-
             # session mode the LLM has access to ALL skills, so we
             # add guidance to the prompt telling it which scanners
             # to skip, reducing wasted LLM turns.
-            skip_guidance = self._build_skip_guidance(folder_path)
+            skip_guidance = self._build_skip_guidance(
+                folder_path, files=files
+            )
             if skip_guidance:
                 scan_prompt = scan_prompt + "\n\n" + skip_guidance
 
@@ -558,7 +569,10 @@ class SecurityScannerAgent:
             return self.config.system_message
 
     @staticmethod
-    def _build_skip_guidance(folder_path: str) -> str:
+    def _build_skip_guidance(
+        folder_path: str,
+        files: Optional[list] = None,
+    ) -> str:
         """
         Build guidance text telling the LLM which scanners to skip.
 
@@ -567,17 +581,26 @@ class SecurityScannerAgent:
         instruction string listing scanners the LLM should NOT invoke
         because there are no relevant files.
 
+        When ``files`` is provided, classification is based on that
+        list instead of the full folder walk.
+
         Args:
             folder_path: The folder being scanned.
+            files:       Optional explicit file list.
 
         Returns:
             A guidance string, or empty string if all scanners are relevant.
         """
         try:
             # Use the shared classify_files function
-            file_extensions, file_names, _ = classify_files(
-                folder_path
-            )
+            if files:
+                file_extensions, file_names, _ = classify_file_list(
+                    files
+                )
+            else:
+                file_extensions, file_names, _ = classify_files(
+                    folder_path
+                )
 
             # Find scanners that are NOT relevant for these files
             irrelevant_scanners = []
@@ -612,6 +635,7 @@ class SecurityScannerAgent:
         log_dir: Optional[str] = None,
         on_output=None,
         scanners: Optional[list] = None,
+        files: Optional[list] = None,
     ) -> dict:
         """
         Run a security scan using parallel sub-agent sessions.
@@ -640,6 +664,9 @@ class SecurityScannerAgent:
             scanners:       Optional list of scanner names to include.
                             When set, only these scanners will be used.
                             None means "use all relevant and available".
+            files:          Optional list of specific file paths to scan.
+                            When provided, the scan plan is based only on
+                            these files rather than the full folder walk.
 
         Returns:
             A dictionary with:
@@ -688,6 +715,7 @@ class SecurityScannerAgent:
                 timeout=timeout,
                 on_tool_stuck=on_tool_stuck,
                 log_dir=log_dir,
+                files=files,
             )
 
             return result

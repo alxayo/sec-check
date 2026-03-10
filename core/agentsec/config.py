@@ -239,6 +239,13 @@ class AgentSecConfig:
     # selection and streaming behaviour without editing code.
     model: str = field(default="gpt-5")
 
+    # ── Per-phase model overrides ────────────────────────────────────
+    # When set, these override `model` for a specific scan phase.
+    # When None (default), the phase uses the global `model` value.
+    model_scanners: Optional[str] = field(default=None)
+    model_analysis: Optional[str] = field(default=None)
+    model_synthesis: Optional[str] = field(default=None)
+
     # ── LLM deep analysis ────────────────────────────────────────────
     # When True, the parallel orchestrator runs a semantic LLM analysis
     # phase after all deterministic tool sub-agents complete.  This
@@ -355,6 +362,11 @@ class AgentSecConfig:
         # Parse LLM deep analysis toggle
         enable_llm_analysis = raw_config.get("enable_llm_analysis", True)
 
+        # Parse per-phase model overrides (None = use global model)
+        model_scanners = raw_config.get("model_scanners") or None
+        model_analysis = raw_config.get("model_analysis") or None
+        model_synthesis = raw_config.get("model_synthesis") or None
+
         # Parse scanner selection list
         raw_scanners = raw_config.get("scanners")
         scanners = None
@@ -367,6 +379,9 @@ class AgentSecConfig:
             system_message=system_message,
             initial_prompt=initial_prompt,
             model=model,
+            model_scanners=model_scanners,
+            model_analysis=model_analysis,
+            model_synthesis=model_synthesis,
             enable_llm_analysis=enable_llm_analysis,
             scanners=scanners,
             system_message_source=sm_source,
@@ -513,6 +528,9 @@ class AgentSecConfig:
         initial_prompt: Optional[str] = None,
         initial_prompt_file: Optional[str] = None,
         model: Optional[str] = None,
+        model_scanners: Optional[str] = None,
+        model_analysis: Optional[str] = None,
+        model_synthesis: Optional[str] = None,
         enable_llm_analysis: Optional[bool] = None,
         scanners: Optional[List[str]] = None,
     ) -> "AgentSecConfig":
@@ -545,6 +563,9 @@ class AgentSecConfig:
         new_system_message = self.system_message
         new_initial_prompt = self.initial_prompt
         new_model = self.model
+        new_model_scanners = self.model_scanners
+        new_model_analysis = self.model_analysis
+        new_model_synthesis = self.model_synthesis
         new_enable_llm_analysis = self.enable_llm_analysis
         new_scanners = self.scanners
         new_sm_source = self.system_message_source
@@ -579,6 +600,14 @@ class AgentSecConfig:
             new_model = model
             new_model_source = f"{SOURCE_CLI_FLAG}: --model"
         
+        # Apply per-phase model overrides
+        if model_scanners is not None:
+            new_model_scanners = model_scanners
+        if model_analysis is not None:
+            new_model_analysis = model_analysis
+        if model_synthesis is not None:
+            new_model_synthesis = model_synthesis
+
         # Apply LLM analysis override
         if enable_llm_analysis is not None:
             new_enable_llm_analysis = enable_llm_analysis
@@ -592,6 +621,9 @@ class AgentSecConfig:
             system_message=new_system_message,
             initial_prompt=new_initial_prompt,
             model=new_model,
+            model_scanners=new_model_scanners,
+            model_analysis=new_model_analysis,
+            model_synthesis=new_model_synthesis,
             enable_llm_analysis=new_enable_llm_analysis,
             scanners=new_scanners,
             system_message_source=new_sm_source,
@@ -650,3 +682,49 @@ class AgentSecConfig:
             >>> print(prompt)
         """
         return self.initial_prompt.format(folder_path=folder_path)
+
+    def format_prompt_for_files(
+        self,
+        folder_path: str,
+        files: list,
+    ) -> str:
+        """
+        Build a scan prompt targeting specific files instead of a whole folder.
+
+        When the user passes an explicit file list (e.g. git-changed files,
+        or files selected in the VS Code explorer / Source Control pane),
+        this method generates a prompt that tells the LLM to scan only
+        those files rather than discovering files via ``find``.
+
+        The folder_path is still provided for context (skill directories,
+        report location) but the LLM is told to restrict its analysis to
+        the listed files.
+
+        Args:
+            folder_path: Root folder (used for context / skill discovery).
+            files:       List of absolute file paths to scan.
+
+        Returns:
+            A formatted prompt string.
+        """
+        file_list = "\n".join(f"- {f}" for f in files)
+        return (
+            f"Scan the following specific files for security vulnerabilities.\n"
+            f"The project root is {folder_path}.\n\n"
+            f"Files to scan:\n{file_list}\n\n"
+            f"Check for:\n"
+            f"- Malicious code patterns\n"
+            f"- Data exfiltration attempts\n"
+            f"- Reverse shells and backdoors\n"
+            f"- Suspicious obfuscated code\n"
+            f"- Hardcoded credentials and secrets\n"
+            f"- Dangerous function calls (eval, exec, subprocess with shell=True)\n\n"
+            f"Follow these steps:\n\n"
+            f"1. Do NOT use find to discover files — scan ONLY the files listed above.\n"
+            f"2. Use the skill tool to run security scanners on the project root {folder_path} "
+            f"(scanners will receive the full folder but focus your report on the listed files).\n"
+            f"3. Use view to inspect each listed file for deeper manual analysis.\n"
+            f"4. Compile ALL findings into a structured Markdown security report "
+            f"with severity levels, line numbers, code snippets, and remediation advice.\n\n"
+            f"Start now by reading the first file."
+        )

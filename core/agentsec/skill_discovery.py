@@ -142,6 +142,42 @@ FOLDERS_TO_SKIP: Set[str] = {
 # These live in skill_discovery so both agent.py and orchestrator.py
 # can import them without either depending on the other.
 
+def classify_file_list(
+    file_paths: List[str],
+) -> Tuple[Dict[str, int], Set[str], int]:
+    """
+    Classify an explicit list of file paths by extension and name.
+
+    Same purpose as ``classify_files`` but operates on a pre-built
+    list of paths instead of walking a directory.  Used when the
+    caller wants to scan specific files (e.g. git-changed files).
+
+    Args:
+        file_paths: List of absolute or relative file paths.
+
+    Returns:
+        A 3-tuple of (extension_counts, filename_set, total_files),
+        identical in shape to ``classify_files``.
+    """
+    extension_counts: Dict[str, int] = {}
+    filename_set: Set[str] = set()
+    total = 0
+
+    for file_path in file_paths:
+        if not os.path.isfile(file_path):
+            continue
+        total += 1
+        filename = os.path.basename(file_path)
+        extension = os.path.splitext(filename)[1].lower()
+        if extension:
+            extension_counts[extension] = (
+                extension_counts.get(extension, 0) + 1
+            )
+        filename_set.add(filename.lower())
+
+    return extension_counts, filename_set, total
+
+
 def classify_files(
     folder_path: str,
 ) -> Tuple[Dict[str, int], Set[str], int]:

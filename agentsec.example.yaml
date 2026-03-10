@@ -144,3 +144,22 @@
 #   model: gpt-5
 #   model: claude-sonnet-4.5
 #   model: gpt-4.1
+
+
+# Per-Phase Model Overrides
+# =========================
+# You can use a different model for each scan phase.
+# When not set, each phase falls back to the global `model` above.
+#
+# Phase 2 — Parallel scanner sub-agents (tool runners):
+# model_scanners: gpt-4.1-mini
+#
+# Phase 3 — LLM deep analysis (semantic malicious code review):
+# model_analysis: claude-sonnet-4.5
+#
+# Phase 4 — Report synthesis (deduplication and report compilation):
+# model_synthesis: gpt-4.1-mini
+#
+# Example: Use a powerful model for analysis but fast/cheap for everything else:
+#   model: gpt-4.1-mini
+#   model_analysis: gpt-5

@@ -150,6 +150,14 @@ async def _handle_scan(command: dict) -> None:
     if config_overrides.get("systemMessage"):
         config.system_message = config_overrides["systemMessage"]
 
+    # Per-phase model overrides
+    if config_overrides.get("modelScanners"):
+        config.model_scanners = config_overrides["modelScanners"]
+    if config_overrides.get("modelAnalysis"):
+        config.model_analysis = config_overrides["modelAnalysis"]
+    if config_overrides.get("modelSynthesis"):
+        config.model_synthesis = config_overrides["modelSynthesis"]
+
     max_concurrent = config_overrides.get("maxConcurrent", 3)
     enable_llm = config_overrides.get("enableLlmAnalysis", True)
     timeout = config_overrides.get("timeout", 1800)
@@ -160,6 +168,13 @@ async def _handle_scan(command: dict) -> None:
     scanners_list = None
     if isinstance(raw_scanners, list) and raw_scanners:
         scanners_list = [str(s).strip() for s in raw_scanners if str(s).strip()]
+
+    # File list: if the extension sends specific file paths, only
+    # those files will be scanned instead of the whole folder.
+    raw_files = config_overrides.get("files")
+    files_list = None
+    if isinstance(raw_files, list) and raw_files:
+        files_list = [str(f).strip() for f in raw_files if str(f).strip()]
 
     # Set up progress tracking for real-time updates
     tracker = ProgressTracker(
@@ -184,12 +199,14 @@ async def _handle_scan(command: dict) -> None:
                 max_concurrent=max_concurrent,
                 on_output=_scanner_output,
                 scanners=scanners_list,
+                files=files_list,
             )
         else:
             _log("info", "Starting serial scan")
             result = await agent.scan(
                 folder_path=folder,
                 timeout=timeout,
+                files=files_list,
             )
 
         tracker.finish_scan()
