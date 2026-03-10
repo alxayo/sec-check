@@ -17,6 +17,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -137,7 +142,28 @@ jobs:
             dist/agentsec-copilot-assets-${{ steps.version.outputs.version }}.zip
             dist/agentsec-copilot-assets-${{ steps.version.outputs.version }}.tar.gz
 
-      - name: Create GitHub release and upload wheels
+      # ============================================================
+      # VS CODE EXTENSION (VSIX)
+      # ============================================================
+      - name: Install VS Code extension dependencies
+        working-directory: vscode-extension
+        run: npm install
+
+      - name: Build VS Code extension (production)
+        working-directory: vscode-extension
+        run: npm run build
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license --out "../dist/agentsec-${{ steps.version.outputs.version }}.vsix"
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsec-vsix-${{ steps.version.outputs.version }}
+          path: dist/*.vsix
+
+      - name: Create GitHub release and upload all artifacts
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -145,5 +171,6 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*.whl
+            dist/*.vsix
             dist/agentsec-copilot-assets-${{ steps.version.outputs.version }}.zip
             dist/agentsec-copilot-assets-${{ steps.version.outputs.version }}.tar.gz

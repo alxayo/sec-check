@@ -5,6 +5,11 @@
   "version": "0.1.0",
   "publisher": "agentsec",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alxayo/sec-check.git",
+    "directory": "vscode-extension"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },

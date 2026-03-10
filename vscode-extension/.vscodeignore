@@ -5,3 +5,6 @@ test/
 tsconfig.json
 esbuild.config.mjs
 .eslintrc.*
+dist/**/*.map
+package-lock.json
+.gitignore

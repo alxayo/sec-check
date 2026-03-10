@@ -37,6 +37,7 @@ FILES_TO_UPDATE = [
     PROJECT_ROOT / "cli/pyproject.toml",
     PROJECT_ROOT / "core/agentsec/__init__.py",
     PROJECT_ROOT / "cli/agentsec_cli/__init__.py",
+    PROJECT_ROOT / "vscode-extension/package.json",
 ]
 
 def validate_version(version):
@@ -78,6 +79,13 @@ def update_file_version(file_path, new_version):
         pattern = r'(__version__\s*=\s*")([^"]+)(")'
         replacement = f'\\g<1>{new_version}\\g<3>'
         content = re.sub(pattern, replacement, content)
+
+    # 3. JSON version (package.json)
+    elif file_path.suffix == ".json":
+        # Replace: "version": "..."
+        pattern = r'("version"\s*:\s*")([^"]+)(")'
+        replacement = f'\\g<1>{new_version}\\g<3>'
+        content = re.sub(pattern, replacement, content, count=1)
 
     file_path.write_text(content, encoding="utf-8")
     print(f"Updated {file_path.relative_to(PROJECT_ROOT)} -> {new_version}")

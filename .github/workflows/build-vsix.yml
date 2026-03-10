@@ -1,0 +1,60 @@
+name: Build VS Code Extension (VSIX)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "vscode-extension/**"
+      - ".github/workflows/build-vsix.yml"
+  pull_request:
+    paths:
+      - "vscode-extension/**"
+      - ".github/workflows/build-vsix.yml"
+  # Also run when a version tag is pushed (release flow)
+  # The release-wheels workflow handles attaching to the GH Release.
+
+permissions:
+  contents: read
+
+jobs:
+  build-vsix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install extension dependencies
+        working-directory: vscode-extension
+        run: npm install
+
+      - name: Build extension (production)
+        working-directory: vscode-extension
+        run: npm run build
+
+      - name: Resolve extension version
+        id: ext-version
+        working-directory: vscode-extension
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Extension version: ${VERSION}"
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license --out "../dist/agentsec-${VERSION}.vsix"
+        env:
+          VERSION: ${{ steps.ext-version.outputs.version }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsec-vsix-${{ steps.ext-version.outputs.version }}
+          path: dist/*.vsix
