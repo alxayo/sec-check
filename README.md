@@ -13,6 +13,53 @@ All release artifacts are attached to each [GitHub Release](https://github.com/a
 | `agentsec-X.Y.Z.vsix` | VS Code extension |
 | `agentsec-copilot-assets-X.Y.Z.zip/.tar.gz` | Copilot skills, agents & prompts |
 
+### One-command installers (recommended)
+
+These scripts install all required runtime pieces from the latest release:
+- `agentsec_core` wheel
+- `agentsec_cli` wheel
+- Copilot skills copied to user-level `~/.copilot/skills/`
+
+By default, installers create a virtual environment at `~/agentsec-venv`.
+
+### Fastest full install (core + CLI + assets/skills)
+
+Run exactly one command for your OS. No manual download step is required.
+
+**Linux/macOS (auto-detect inside script):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/alxayo/sec-check/main/scripts/install.sh | bash
+```
+
+**Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/alxayo/sec-check/main/scripts/install-linux.sh | bash
+```
+
+**macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/alxayo/sec-check/main/scripts/install-macos.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/alxayo/sec-check/main/scripts/install-windows.ps1 | iex
+```
+
+After install, verify:
+```bash
+~/agentsec-venv/bin/agentsec --version
+```
+
+Skills are installed to:
+- macOS/Linux: `~/.copilot/skills/`
+- Windows: `%USERPROFILE%\\.copilot\\skills\\`
+
+Optional environment variable overrides (all platforms):
+- `AGENTSEC_REPO` (default: `alxayo/sec-check`)
+- `AGENTSEC_VENV_DIR` (default: `~/agentsec-venv`)
+- `AGENTSEC_SKILLS_DIR` (default: `~/.copilot/skills`)
+
 ---
 
 ### Option A — VS Code Extension (interactive)
