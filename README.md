@@ -21,6 +21,10 @@ All release artifacts are attached to each [GitHub Release](https://github.com/a
 
 - VS Code 1.95 or later
 - A GitHub Copilot subscription
+- GitHub Copilot CLI **1.0.15** or later (the extension bundles its own, but the CLI must be authenticated)
+- Python **3.12+** (3.10 minimum) — required by the `agentsec-core` backend
+- `agentsec-core` wheel installed in a virtual environment (see Option B Step 3)
+- The `agentsec.pythonPath` VS Code setting pointing to the venv Python (see Troubleshooting)
 
 #### Step 2 — Download the VSIX
 
@@ -54,8 +58,10 @@ Results appear in the **AgentSec** panel in the Activity Bar.
 
 #### Step 1 — Prerequisites
 
-- Python 3.12+ (3.11 minimum)
+- Python **3.12+** (3.11 supported, 3.10 minimum)
 - GitHub Copilot subscription
+- GitHub Copilot CLI **1.0.15** or later, installed and authenticated
+- GitHub Copilot Python SDK (`github-copilot-sdk`) **>=0.2.0** — installed automatically as a dependency of `agentsec-core`
 - GitHub Copilot CLI installed and authenticated:
   ```bash
   # Install Copilot CLI (requires GitHub CLI)
@@ -127,6 +133,111 @@ Then pass it to the CLI:
 ```bash
 agentsec scan ./src --config ./agentsec.yaml
 ```
+
+---
+
+### Uninstalling
+
+To remove the wheel packages from your virtual environment:
+
+```bash
+source ~/agentsec-venv/bin/activate
+
+# Remove the CLI (if installed)
+pip uninstall agentsec-cli
+
+# Remove the core library
+pip uninstall agentsec-core
+
+# Verify they are gone
+pip list | grep agentsec
+```
+
+To remove the VS Code extension:
+
+```bash
+code --uninstall-extension agentsec.agentsec
+```
+
+Or from the VS Code Extensions sidebar: find **AgentSec**, click the gear icon, and select **Uninstall**.
+
+To delete the virtual environment entirely:
+
+```bash
+rm -rf ~/agentsec-venv
+```
+
+---
+
+### Adding Custom Scanning Skills
+
+AgentSec discovers Copilot CLI agentic skills from two directories:
+
+| Location | Scope | Path |
+|----------|-------|------|
+| **User-level** | All projects | `~/.copilot/skills/` |
+| **Project-level** | One project only | `<project-root>/.copilot/skills/` |
+
+To add a new scanner, create a directory with a `SKILL.md` file inside one of these paths:
+
+```
+~/.copilot/skills/
+└── my-custom-scanner/
+    └── SKILL.md
+```
+
+The `SKILL.md` must start with YAML frontmatter containing `name` and `description`:
+
+```markdown
+---
+name: my-custom-scanner
+description: One-line description of what this scanner does and when to use it.
+---
+
+# My Custom Scanner Skill
+
+Detailed instructions for the AI on how to invoke the scanner,
+interpret its output, and report findings.
+
+## When to Use This Skill
+...
+
+## How to Run
+...
+```
+
+The skill will be **automatically discovered** the next time AgentSec starts a scan — no code changes needed. The `discover` command in the VS Code extension and the `--verbose` CLI flag will confirm the skill was picked up.
+
+#### Registering a new scanner for parallel mode
+
+For the parallel orchestrator to know which **file types** a scanner is relevant for (so it can skip scanners that don't apply), add one entry to `SCANNER_REGISTRY` in [core/agentsec/skill_discovery.py](core/agentsec/skill_discovery.py):
+
+```python
+"my-custom-scanner": {
+    "tool": "my-tool",           # CLI binary name (for availability check)
+    "extensions": {".go", ".rs"}, # File extensions this scanner handles
+    "filenames": set(),           # Specific filenames (e.g. "Makefile")
+    "description": "Go and Rust security scanning",
+},
+```
+
+Set `extensions` and `filenames` to `None` (not empty set) if the scanner is always relevant regardless of file types (like `graudit` or `trivy`).
+
+All derived mappings (`SKILL_TO_TOOL_MAP`, `SCANNER_RELEVANCE`, etc.) update automatically from this single registry entry.
+
+---
+
+### Version Requirements Summary
+
+| Component | Minimum Version | Recommended |
+|-----------|----------------|-------------|
+| Python | 3.10 | 3.12+ |
+| GitHub Copilot CLI | 1.0.15 | Latest |
+| GitHub Copilot SDK (`github-copilot-sdk`) | 0.2.0 | Latest |
+| VS Code | 1.95 | Latest |
+| GitHub Copilot subscription | Any tier | — |
+
+The `agentsec-core` wheel also depends on `agent-framework-core==1.0.0b260107` and `agent-framework-azure-ai==1.0.0b260107`, which are installed automatically by `pip`.
 
 ---
 
@@ -531,6 +642,32 @@ Or add it directly to `settings.json`:
 ```
 
 Reload VS Code after saving the setting.
+
+---
+
+### VS Code extension error: `Tool discovery failed: Bridge exited with code 1 before ready`
+
+The extension spawns `python -m agentsec.vscode_bridge` and waits for a `{"type": "ready"}` message. If Python crashes before sending it, you get this error. The most common cause is a **missing dependency** — the `github-copilot-sdk` package (which provides the `copilot` Python module).
+
+**Fix:** Activate your venv and install the SDK:
+```bash
+source ~/agentsec-venv/bin/activate
+pip install "github-copilot-sdk>=0.2.0"
+```
+
+Or reinstall `agentsec-core` from source (which includes the SDK as a dependency):
+```bash
+pip install -e ./core
+```
+
+Then verify the bridge starts cleanly:
+```bash
+~/agentsec-venv/bin/python -m agentsec.vscode_bridge &
+# You should see: {"type": "ready"}
+kill %1
+```
+
+Make sure `agentsec.pythonPath` in VS Code settings points to `~/agentsec-venv/bin/python`.
 
 ---
 
