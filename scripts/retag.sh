@@ -32,7 +32,7 @@ echo "Tag     : $TAG"
 echo ""
 
 read -r -p "Move tag '$TAG' to HEAD and force-push? [y/N] " confirm
-if [[ "${confirm,,}" != "y" ]]; then
+if [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
     echo "Aborted."
     exit 0
 fi
