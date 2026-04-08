@@ -26,11 +26,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: "20"
+          dependency-graph: disabled
 
       - name: Install extension dependencies
         working-directory: vscode-extension
@@ -48,6 +51,9 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Extension version: ${VERSION}"
+
+      - name: Create dist directory
+        run: mkdir -p dist
 
       - name: Package VSIX
         working-directory: vscode-extension
