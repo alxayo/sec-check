@@ -49,6 +49,9 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Extension version: ${VERSION}"
 
+      - name: Create dist directory
+        run: mkdir -p dist
+
       - name: Package VSIX
         working-directory: vscode-extension
         run: |
