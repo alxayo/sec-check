@@ -1,0 +1,80 @@
+title: Sec-Check
+description: "AI-powered security scanning — detect exfiltration, reverse shells, backdoors & supply-chain traps before you run untrusted code."
+url: "https://alxayo.github.io"
+baseurl: "/sec-check"
+
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+
+# Color scheme
+color_scheme: dark
+
+# Logo & branding
+logo: "/assets/images/sec-check-logo.png"
+
+# Aux links (top-right)
+aux_links:
+  "GitHub":
+    - "https://github.com/alxayo/sec-check"
+
+aux_links_new_tab: true
+
+# Footer
+footer_content: "Sec-Check &mdash; open-source AI security scanner. Built with <a href=\"https://docs.github.com/en/copilot\">GitHub Copilot SDK</a>."
+
+# Enable copy code button
+enable_copy_code_button: true
+
+# Back to top link
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Search
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+# Heading anchor links
+heading_anchors: true
+
+# External navigation links
+nav_external_links:
+  - title: PyPI Package
+    url: https://pypi.org/project/agentsec-cli/
+    hide_icon: false
+
+# Callouts
+callouts:
+  warning:
+    title: Warning
+    color: yellow
+  note:
+    title: Note
+    color: blue
+  tip:
+    title: Tip
+    color: green
+  important:
+    title: Important
+    color: red
+
+# Mermaid diagrams
+mermaid:
+  version: "11"
+
+# Plugins
+plugins:
+  - jekyll-seo-tag
+  - jekyll-remote-theme
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
