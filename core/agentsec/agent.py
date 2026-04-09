@@ -27,7 +27,7 @@ import os
 import time
 from typing import Optional
 
-from copilot import CopilotClient, SessionConfig, MessageOptions
+from copilot import CopilotClient, PermissionRequestResult
 from dotenv import load_dotenv
 
 from agentsec.config import AgentSecConfig
@@ -51,6 +51,11 @@ load_dotenv()
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+def _auto_approve_permissions(request, context):
+    """Auto-approve all tool permission requests from the Copilot SDK."""
+    return PermissionRequestResult(kind="approved")
 
 # ── Activity-based wait constants ────────────────────────────────────
 #
@@ -269,17 +274,16 @@ class SecurityScannerAgent:
                     f"-{int(time.time())}"
                 )
                 sess = await self.client.create_session(
-                    SessionConfig(
-                        session_id=sid,
-                        model=self.config.model,
-                        system_message={
-                            "mode": "append",
-                            "content": dynamic_system_message,
-                        },
-                        skill_directories=(
-                            skill_dirs if skill_dirs else None
-                        ),
-                    )
+                    on_permission_request=_auto_approve_permissions,
+                    session_id=sid,
+                    model=self.config.model,
+                    system_message={
+                        "mode": "append",
+                        "content": dynamic_system_message,
+                    },
+                    skill_directories=(
+                        skill_dirs if skill_dirs else None
+                    ),
                 )
                 logger.debug(f"Created scan session: {sid}")
                 return sess

@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -115,8 +115,10 @@ jobs:
           # Include full skills directory content.
           cp -R .github/skills "$PACKAGE_ROOT/.github/"
 
-          # Include the Copilot setup workflow only.
-          cp --parents .github/workflows/copilot-setup-steps.yml "$PACKAGE_ROOT"
+          # Include the Copilot setup workflow only (if it exists).
+          if [[ -f ".github/workflows/copilot-setup-steps.yml" ]]; then
+            cp --parents .github/workflows/copilot-setup-steps.yml "$PACKAGE_ROOT"
+          fi
 
           # Create both archive formats with .github as the top-level folder.
           tar -czf "${ARCHIVE_BASE}.tar.gz" -C "$PACKAGE_ROOT" .github

@@ -47,7 +47,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
-from copilot import SessionConfig, MessageOptions
+from copilot import PermissionRequestResult
 
 from agentsec.progress import get_global_tracker
 from agentsec.session_logger import SessionLogger
@@ -77,6 +77,11 @@ OutputCallback = Optional[Callable[[str, str], None]]
 
 # Set up logging for this module
 logger = logging.getLogger(__name__)
+
+
+def _auto_approve_permissions(request, context):
+    """Auto-approve all tool permission requests from the Copilot SDK."""
+    return PermissionRequestResult(kind="approved")
 
 
 # ── Constants ────────────────────────────────────────────────────────
@@ -991,15 +996,14 @@ class ParallelScanOrchestrator:
                 sid = f"{session_id_base}-{int(time.time())}"
                 scanner_model = self._config.model_scanners or self._config.model
                 sess = await self._client.create_session(
-                    SessionConfig(
-                        session_id=sid,
-                        model=scanner_model,
-                        system_message={
-                            "mode": "append",
-                            "content": system_message,
-                        },
-                        skill_directories=skill_dirs,
-                    )
+                    on_permission_request=_auto_approve_permissions,
+                    session_id=sid,
+                    model=scanner_model,
+                    system_message={
+                        "mode": "append",
+                        "content": system_message,
+                    },
+                    skill_directories=skill_dirs,
                 )
                 logger.debug(f"[{label}] Created session: {sid} (model={scanner_model})")
                 return sess
@@ -1141,15 +1145,14 @@ class ParallelScanOrchestrator:
                 sid = f"agentsec-llm-analysis-{int(time.time())}"
                 analysis_model = self._config.model_analysis or self._config.model
                 sess = await self._client.create_session(
-                    SessionConfig(
-                        session_id=sid,
-                        model=analysis_model,
-                        system_message={
-                            "mode": "append",
-                            "content": LLM_ANALYSIS_SYSTEM_MESSAGE,
-                        },
-                        skill_directories=skill_dirs,
-                    )
+                    on_permission_request=_auto_approve_permissions,
+                    session_id=sid,
+                    model=analysis_model,
+                    system_message={
+                        "mode": "append",
+                        "content": LLM_ANALYSIS_SYSTEM_MESSAGE,
+                    },
+                    skill_directories=skill_dirs,
                 )
                 logger.debug(f"[{label}] Created session: {sid} (model={analysis_model})")
                 return sess
@@ -1256,17 +1259,16 @@ class ParallelScanOrchestrator:
             # Create a synthesis session
             synthesis_model = self._config.model_synthesis or self._config.model
             session = await self._client.create_session(
-                SessionConfig(
-                    session_id=f"agentsec-synthesis-{int(time.time())}",
-                    model=synthesis_model,
-                    system_message={
-                        "mode": "append",
-                        "content": SYNTHESIS_SYSTEM_MESSAGE,
-                    },
-                    skill_directories=(
-                        synth_skill_dirs if synth_skill_dirs else None
-                    ),
-                )
+                on_permission_request=_auto_approve_permissions,
+                session_id=f"agentsec-synthesis-{int(time.time())}",
+                model=synthesis_model,
+                system_message={
+                    "mode": "append",
+                    "content": SYNTHESIS_SYSTEM_MESSAGE,
+                },
+                skill_directories=(
+                    synth_skill_dirs if synth_skill_dirs else None
+                ),
             )
 
             # Build the synthesis prompt
@@ -1296,7 +1298,7 @@ class ParallelScanOrchestrator:
 
             try:
                 response = await session.send_and_wait(
-                    MessageOptions(prompt=prompt),
+                    prompt,
                     timeout=safety_timeout,
                 )
             except asyncio.TimeoutError:

@@ -37,7 +37,6 @@ import logging
 import time
 from typing import Callable, Optional, Union
 
-from copilot import MessageOptions
 from copilot.session import SessionEventType
 
 from agentsec.progress import get_global_tracker
@@ -481,7 +480,7 @@ async def run_session_to_completion(
     # we return immediately with a clear error instead of entering
     # the wait loop and timing out after inactivity_timeout seconds.
     try:
-        await session.send(MessageOptions(prompt=prompt))
+        await session.send(prompt)
     except Exception as send_error:
         logger.error(
             f"[{label}] Failed to send prompt: {send_error}"
@@ -702,9 +701,7 @@ async def run_session_to_completion(
                     f"/{max_idle_nudges})"
                 )
                 try:
-                    await session.send(
-                        MessageOptions(prompt=actual_nudge)
-                    )
+                    await session.send(actual_nudge)
                     if slog:
                         slog.log_nudge_sent(actual_nudge)
                     last_activity_time["value"] = time.time()

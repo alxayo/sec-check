@@ -20,13 +20,15 @@ permissions:
 jobs:
   build-vsix:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -49,7 +51,9 @@ jobs:
 
       - name: Package VSIX
         working-directory: vscode-extension
-        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license --out "../dist/agentsec-${VERSION}.vsix"
+        run: |
+          mkdir -p ../dist
+          npx @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license --out "../dist/agentsec-${VERSION}.vsix"
         env:
           VERSION: ${{ steps.ext-version.outputs.version }}
 
